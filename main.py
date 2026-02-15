@@ -7,12 +7,14 @@ import aiosqlite
 import discord
 from discord import app_commands
 
-# ==============================
+# ==========================
 # CONFIG / IDs
-# ==============================
-TOKEN = os.getenv("TOKEN")
+# ==========================
 
-    raise SystemExit('❌ TOKEN não encontrado. Defina a variável de ambiente TOKEN e reinicie o terminal.')
+TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    raise SystemExit("❌ TOKEN não encontrado. Defina a variável de ambiente TOKEN no Railway e redeploy.")
+
 
 MESTRE_ID = 1255256495369748573  # Cannabinoide
 
@@ -1662,6 +1664,7 @@ async def on_ready():
 # RUN
 # ==============================
 client.run("TOKEN")
+
 
 
 
