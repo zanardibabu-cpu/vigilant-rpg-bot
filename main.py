@@ -972,10 +972,31 @@ async def perfil(interaction: discord.Interaction):
     if not p:
         return
 
-    eq = p.get("equipado") or {}
-    arma = eq.get("arma") or "—"
-    armadura = eq.get("armadura") or "—"
-    especial = eq.get("especial") or "—"
+    # garante formato novo (inclui aneis)
+    p.setdefault("equipado", {})
+    p["equipado"] = ensure_equipado_format(p["equipado"])
+
+    eq = p["equipado"]
+
+    def nome_item(item_id: str | None) -> str:
+        if not item_id:
+            return "—"
+        return LOJA.get(item_id, {}).get("nome", item_id)
+
+    arma     = nome_item(eq.get("arma"))
+    armadura = nome_item(eq.get("armadura"))
+    elmo     = nome_item(eq.get("elmo"))
+    botas    = nome_item(eq.get("botas"))
+    luvas    = nome_item(eq.get("luvas"))
+    cajado   = nome_item(eq.get("cajado"))
+    especial = nome_item(eq.get("especial"))
+
+    # anéis (1..8)
+    aneis = eq.get("aneis", [])
+    linhas_aneis = []
+    for i in range(8):
+        item_id = aneis[i] if i < len(aneis) else None
+        linhas_aneis.append(f"{i+1}. {nome_item(item_id)}")
 
     embed = discord.Embed(
         title=f"👤 Perfil — {interaction.user.display_name}",
@@ -995,6 +1016,7 @@ async def perfil(interaction: discord.Interaction):
         ),
         inline=True
     )
+
     embed.add_field(
         name="Atributos (com bônus)",
         value=(
@@ -1007,11 +1029,27 @@ async def perfil(interaction: discord.Interaction):
         ),
         inline=True
     )
+
     embed.add_field(
         name="Equipado",
-        value=f"🗡 Arma: `{arma}`\n🛡 Armadura: `{armadura}`\n🧩 Especial: `{especial}`",
+        value=(
+            f"🗡 Arma: **{arma}**\n"
+            f"🛡 Armadura: **{armadura}**\n"
+            f"🪖 Elmo: **{elmo}**\n"
+            f"👢 Botas: **{botas}**\n"
+            f"🧤 Luvas: **{luvas}**\n"
+            f"🪄 Cajado: **{cajado}**\n"
+            f"🧩 Especial: **{especial}**"
+        ),
         inline=False
     )
+
+    embed.add_field(
+        name="💍 Anéis (1–8)",
+        value="\n".join(linhas_aneis),
+        inline=False
+    )
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # /comandos só no canal de comandos
@@ -1729,6 +1767,7 @@ async def on_ready():
 # RUN
 # ==============================
 client.run(TOKEN)
+
 
 
 
