@@ -1663,7 +1663,8 @@ async def on_ready():
 # ==============================
 # RUN
 # ==============================
-client.run("TOKEN")
+client.run(TOKEN)
+
 
 
 
