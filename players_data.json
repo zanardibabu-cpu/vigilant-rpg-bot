@@ -1,0 +1,28 @@
+{
+    "1255256495369748573": {
+        "classe": "mago",
+        "level": 1,
+        "xp": 0,
+        "gold": 100,
+        "pontos": 0,
+        "stats": {
+            "hp": 35,
+            "mana": 60,
+            "atk": 1,
+            "magia": 12,
+            "defesa": 2,
+            "sorte": 3,
+            "furtividade": 2,
+            "destreza": 3
+        },
+        "max_hp": 35,
+        "max_mana": 60,
+        "hp": 35,
+        "mana": 60,
+        "inventario": [],
+        "equipado": {
+            "arma": null,
+            "armadura": null
+        }
+    }
+}
