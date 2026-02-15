@@ -11,7 +11,6 @@ from discord import app_commands
 # CONFIG / IDs
 # ==============================
 TOKEN = os.getenv("TOKEN")
-client.run(TOKEN)
 
     raise SystemExit('❌ TOKEN não encontrado. Defina a variável de ambiente TOKEN e reinicie o terminal.')
 
@@ -1663,5 +1662,6 @@ async def on_ready():
 # RUN
 # ==============================
 client.run("TOKEN")
+
 
 
