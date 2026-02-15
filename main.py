@@ -1126,7 +1126,7 @@ async def vender(interaction: discord.Interaction, item_id: str):
 
     await interaction.response.send_message(f"💰 Vendeu **{item['nome']}** por **{ganho}** gold (60%).", ephemeral=True)
 
-@tree.command(name="equipar", description="Equipar item (arma/armadura/especial).")
+@tree.command(name="equipar", description="Equipar item (usa o slot do item).")
 @only_channel(CANAL_LOJA_ID, "loja")
 @app_commands.describe(item_id="ID do item")
 async def equipar(interaction: discord.Interaction, item_id: str):
@@ -1143,43 +1143,108 @@ async def equipar(interaction: discord.Interaction, item_id: str):
         return
 
     item = LOJA.get(item_id)
-    if not item or item.get("tipo") not in ["arma", "armadura", "especial"]:
-        await interaction.response.send_message("❌ Este item não pode ser equipado.", ephemeral=True)
+    if not item:
+        await interaction.response.send_message("❌ Item não encontrado.", ephemeral=True)
         return
 
+    # trava por classe (se existir)
     if "classes" in item and p["classe"] not in item["classes"]:
         await interaction.response.send_message(f"❌ Apenas para: {', '.join(item['classes'])}", ephemeral=True)
         return
 
-    slot = item["tipo"]
-    p.setdefault("equipado", {}).setdefault(slot, None)
+    slot = item.get("slot") or item.get("tipo")  # fallback
+    if not slot:
+        await interaction.response.send_message("❌ Item sem slot definido.", ephemeral=True)
+        return
+
+    p.setdefault("equipado", {})
+    p["equipado"] = ensure_equipado_format(p["equipado"])
+
+    # anéis: equipa no primeiro espaço vazio (até 8)
+    if slot == "anel":
+        aneis = p["equipado"].get("aneis", [])
+        try:
+            idx = aneis.index(None)
+        except ValueError:
+            await interaction.response.send_message("❌ Você já está com 8 anéis equipados.", ephemeral=True)
+            return
+        aneis[idx] = item_id
+        p["equipado"]["aneis"] = aneis
+        await save_player(p)
+        await interaction.response.send_message(f"💍 Equipou **{item['nome']}** no anel #{idx+1}.", ephemeral=True)
+        return
+
+    # slots normais
+    allowed = {"arma","armadura","elmo","botas","luvas","cajado","especial"}
+    if slot not in allowed:
+        await interaction.response.send_message("❌ Este item não pode ser equipado.", ephemeral=True)
+        return
+
     p["equipado"][slot] = item_id
     await save_player(p)
-
     await interaction.response.send_message(f"⚙️ Equipou **{item['nome']}** no slot **{slot}**.", ephemeral=True)
 
-@tree.command(name="desequipar", description="Desequipar um slot (arma/armadura/especial).")
+
+@tree.command(name="desequipar", description="Desequipar um slot (arma/armadura/elmo/botas/luvas/cajado/especial).")
 @only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(slot="arma | armadura | especial")
+@app_commands.describe(slot="arma | armadura | elmo | botas | luvas | cajado | especial")
 async def desequipar(interaction: discord.Interaction, slot: str):
     p = await require_player(interaction)
     if not p:
         return
-    slot = slot.lower()
-    if slot not in ["arma", "armadura", "especial"]:
-        await interaction.response.send_message("❌ Slot inválido. Use: arma, armadura, especial.", ephemeral=True)
+
+    slot = slot.lower().strip()
+    allowed = {"arma","armadura","elmo","botas","luvas","cajado","especial"}
+    if slot not in allowed:
+        await interaction.response.send_message(
+            "❌ Slot inválido. Use: arma, armadura, elmo, botas, luvas, cajado, especial.",
+            ephemeral=True
+        )
         return
 
-    eq = p.get("equipado") or {}
-    if not eq.get(slot):
+    p.setdefault("equipado", {})
+    p["equipado"] = ensure_equipado_format(p["equipado"])
+
+    if not p["equipado"].get(slot):
         await interaction.response.send_message("⚠️ Nada equipado nesse slot.", ephemeral=True)
         return
 
-    eq[slot] = None
-    p["equipado"] = eq
+    item_id = p["equipado"][slot]
+    p["equipado"][slot] = None
     await save_player(p)
 
-    await interaction.response.send_message(f"✅ Desequipou o slot **{slot}**.", ephemeral=True)
+    nm = LOJA.get(item_id, {}).get("nome", item_id)
+    await interaction.response.send_message(f"✅ Desequipou **{nm}** do slot **{slot}**.", ephemeral=True)
+@tree.command(name="desequiparanel", description="Desequipar um anel (posição 1 a 8).")
+@only_channel(CANAL_LOJA_ID, "loja")
+@app_commands.describe(posicao="1 a 8")
+async def desequiparanel(interaction: discord.Interaction, posicao: int):
+    p = await require_player(interaction)
+    if not p:
+        return
+
+    if posicao < 1 or posicao > 8:
+        await interaction.response.send_message("❌ Posição inválida. Use 1 a 8.", ephemeral=True)
+        return
+
+    p.setdefault("equipado", {})
+    p["equipado"] = ensure_equipado_format(p["equipado"])
+
+    idx = posicao - 1
+    aneis = p["equipado"].get("aneis", [])
+    item_id = aneis[idx]
+
+    if not item_id:
+        await interaction.response.send_message(f"⚠️ Não há anel equipado na posição {posicao}.", ephemeral=True)
+        return
+
+    aneis[idx] = None
+    p["equipado"]["aneis"] = aneis
+    await save_player(p)
+
+    nm = LOJA.get(item_id, {}).get("nome", item_id)
+    await interaction.response.send_message(f"✅ Desequipou **{nm}** do anel #{posicao}.", ephemeral=True)
+
 
 @tree.command(name="usar", description="Usar consumível do inventário (poções).")
 @only_channel(CANAL_LOJA_ID, "loja")
@@ -1664,6 +1729,7 @@ async def on_ready():
 # RUN
 # ==============================
 client.run(TOKEN)
+
 
 
 
