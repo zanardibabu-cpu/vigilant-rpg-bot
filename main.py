@@ -10,8 +10,9 @@ from discord import app_commands
 # ==============================
 # CONFIG / IDs
 # ==============================
-TOKEN = ("TOKEN")
-if not TOKEN:
+TOKEN = os.getenv("TOKEN")
+client.run(TOKEN)
+
     raise SystemExit('❌ TOKEN não encontrado. Defina a variável de ambiente TOKEN e reinicie o terminal.')
 
 MESTRE_ID = 1255256495369748573  # Cannabinoide
@@ -1662,4 +1663,5 @@ async def on_ready():
 # RUN
 # ==============================
 client.run("TOKEN")
+
 
