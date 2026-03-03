@@ -26,7 +26,7 @@ CANAL_MESTRE_ID    = 1472274401289310248
 CANAL_CACAR_ID     = 1472365134801276998
 CANAL_TAVERNA_ID   = 0
 
-DB_FILE = "vigillant.db"
+DB_FILE = "vigillant_rpg.sqlite"
 
 # Gameplay
 STAMINA_MAX = 100
@@ -2661,6 +2661,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
