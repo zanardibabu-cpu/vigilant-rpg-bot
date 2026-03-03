@@ -1668,60 +1668,60 @@ async def livro_equipar(interaction: discord.Interaction, spell_id: str):
         await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
         return
 
-    # regra: somente fora de combate/narração OFF
-    if narration_is_on(interaction):
-        await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
-        return
+# regra: somente fora de combate/narração OFF
+if narration_is_on(interaction):
+    await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
+    return
 
-    spell_id = spell_id.lower().strip()
-    s = await spell_get(spell_id)
-    if not s or int(s.get("deleted", 0)) == 1:
-        await interaction.response.send_message("❌ Magia não existe (ou foi removida).", ephemeral=True)
-        return
+spell_id = spell_id.lower().strip()
+s = await spell_get(spell_id)
+if not s or int(s.get("deleted", 0)) == 1:
+    await interaction.response.send_message("❌ Magia não existe (ou foi removida).", ephemeral=True)
+    return
 
-    classes = s.get("classes") or []
-    if p["classe"] not in classes:
-        await interaction.response.send_message(f"❌ Essa magia não é para sua classe. Permitidas: {', '.join(classes)}", ephemeral=True)
-        return
+classes = s.get("classes") or []
+if p["classe"] not in classes:
+    await interaction.response.send_message(f"❌ Essa magia não é para sua classe. Permitidas: {', '.join(classes)}", ephemeral=True)
+    return
 
-    book = p.get("spellbook") or []
-    if spell_id in book:
-        await interaction.response.send_message("⚠️ Essa magia já está no seu livro.", ephemeral=True)
-        return
-    if len(book) >= SPELLBOOK_SLOTS:
-        await interaction.response.send_message(f"❌ Seu livro está cheio (máx {SPELLBOOK_SLOTS}). Desequipe uma primeiro.", ephemeral=True)
-        return
+book = p.get("spellbook") or []
+if spell_id in book:
+    await interaction.response.send_message("⚠️ Essa magia já está no seu livro.", ephemeral=True)
+    return
+if len(book) >= SPELLBOOK_SLOTS:
+    await interaction.response.send_message(f"❌ Seu livro está cheio (máx {SPELLBOOK_SLOTS}). Desequipe uma primeiro.", ephemeral=True)
+    return
 
-    book.append(spell_id)
-    p["spellbook"] = book
-    await save_player(p)
-    await interaction.response.send_message(f"✅ Equipou **{s['nome']}** no livro.", ephemeral=True)
+book.append(spell_id)
+p["spellbook"] = book
+await save_player(p)
+await interaction.response.send_message(f"✅ Equipou **{s['nome']}** no livro.", ephemeral=True)
 
 @tree.command(name="livro_desequipar", description="Desequipar magia do livro (mago/clérigo).")
 @app_commands.describe(spell_id="ID da magia")
 async def livro_desequipar(interaction: discord.Interaction, spell_id: str):
-    p = await require_player(interaction)
-    if not p:
-        return
+p = await require_player(interaction)
+if not p:
+    return
 
-    if not can_use_spellbook(p["classe"]):
-        await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
-        return
+if not can_use_spellbook(p["classe"]):
+    await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
+    return
 
-    if narration_is_on(interaction):
-        await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
-        return
+if narration_is_on(interaction):
+    await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
+    return
 
-    spell_id = spell_id.lower().strip()
-    book = p.get("spellbook") or []
-    if spell_id not in book:
-        await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
-        return
+spell_id = spell_id.lower().strip()
+book = p.get("spellbook") or []
+if spell_id not in book:
+    await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
+    return
 
-    book.remove(spell_id)
-    p["spellbook"] = book
-    await save_player(p)
-    await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", ephemeral=True)
+book.remove(spell_id)
+p["spellbook"] = book
+await save_player(p)
+await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", ephemeral=True)
 
 # ==============================
 # /CACAR — D20 AUTOMÁTICO
@@ -1730,147 +1730,147 @@ async def livro_desequipar(interaction: discord.Interaction, spell_id: str):
 @tree.command(name="cacar", description="Caçar monstros e eventos (D20 automático).")
 @only_channel(CANAL_CACAR_ID, "sala-de-cacar")
 async def cacar(interaction: discord.Interaction):
-    if await blocked_by_narration(interaction):
-        return
+if await blocked_by_narration(interaction):
+    return
 
-    p = await require_player(interaction)
-    if not p:
-        return
-    if await blocked_by_rest(interaction, p):
-        return
+p = await require_player(interaction)
+if not p:
+    return
+if await blocked_by_rest(interaction, p):
+    return
 
-    now = now_ts()
-    last = int(p.get("last_hunt_ts", 0))
-    if now - last < CACAR_COOLDOWN_S:
-        falta = CACAR_COOLDOWN_S - (now - last)
-        await interaction.response.send_message(f"⏳ Aguarde **{falta}s** para caçar novamente.", ephemeral=True)
-        return
+now = now_ts()
+last = int(p.get("last_hunt_ts", 0))
+if now - last < CACAR_COOLDOWN_S:
+    falta = CACAR_COOLDOWN_S - (now - last)
+    await interaction.response.send_message(f"⏳ Aguarde **{falta}s** para caçar novamente.", ephemeral=True)
+    return
 
-    if int(p["stamina"]) < STAMINA_CUSTO_CACAR:
-        await interaction.response.send_message("🥵 Stamina insuficiente. Use **/descansar**.", ephemeral=True)
-        return
+if int(p["stamina"]) < STAMINA_CUSTO_CACAR:
+    await interaction.response.send_message("🥵 Stamina insuficiente. Use **/descansar**.", ephemeral=True)
+    return
 
-    p["stamina"] -= STAMINA_CUSTO_CACAR
-    p["last_hunt_ts"] = now
+p["stamina"] -= STAMINA_CUSTO_CACAR
+p["last_hunt_ts"] = now
 
-    if random.random() < 0.18:
-        forca = random.choice([0, 1, 2])
-        await save_player(p)
-        embed = discord.Embed(
-            title="💀 Emboscada!",
-            description=(
-                "Bandidos armados cercam você.\n\n"
-                "💰 **Pagar 100 gold** e eles vão embora.\n"
-                "⚔️ **Lutar** (D20).\n\n"
-                "_Vigillant observa em silêncio…_"
-            ),
-            color=discord.Color.red()
-        )
-        await interaction.response.send_message(embed=embed, view=BandidosView(interaction.user.id, forca), ephemeral=False)
-        return
-
-    ids = list(MONSTROS.keys())
-    pesos = [int(MONSTROS[k].get("peso", 1)) for k in ids]
-    mob_id = random.choices(ids, weights=pesos, k=1)[0]
-    m = MONSTROS[mob_id]
-
-    tag = "orgânico"
-    if "cibernético" in m["tags"]:
-        tag = "cibernético"
-    if "demoníaco" in m["tags"]:
-        tag = "demoníaco"
-    mob_line = random.choice(MOB_QUOTES[tag])
-
-    d20 = rolar_d20()
-    if d20 == 20:
-        mult = 2.0
-        rotulo = "💥 **CRÍTICO!**"
-    elif d20 >= 14:
-        mult = 1.25
-        rotulo = "⚔️ **Acerto forte**"
-    elif d20 >= 8:
-        mult = 1.0
-        rotulo = "✅ **Acerto**"
-    else:
-        mult = 0.0
-        rotulo = "❌ **Errou**"
-
-    classe = p["classe"]
-    atk = await total_stat(p, "atk")
-    mag = await total_stat(p, "magia")
-    base = atk if classe in ["barbaro", "assassino", "arqueiro", "guerreiro"] else mag
-    dano = int(max(0, base) * mult)
-
-        defesa = await total_stat(p, "defesa")
-    dano_monstro = max(0, int(m["atk"]) - defesa)
-
-    mob_hp = int(m["hp"]) - dano
-    tomou = dano_monstro if mob_hp > 0 else 0
-    p["hp"] = max(0, int(p["hp"]) - tomou)
-
-    ganhou = (mob_hp <= 0 and dano > 0)
-
-    xp_gain = int(m["xp"])
-    gold_gain = int(m["gold"])
-
-    if dano == 0:
-        xp_gain = max(0, xp_gain // 3)
-        gold_gain = max(0, gold_gain // 3)
-
-    drop_txt = ""
-
-    if ganhou:
-        p["xp"] += xp_gain
-        p["gold"] += gold_gain
-
-        eh_raro = int(m.get("peso", 99)) <= 4
-
-        if eh_raro and random.random() < DROP_RARO_CHANCE:
-            drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
-            if drop_item:
-                p.setdefault("inventario", []).append(drop_item["item_id"])
-                drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
-
-    upou = await try_auto_level(p)
+if random.random() < 0.18:
+    forca = random.choice([0, 1, 2])
     await save_player(p)
-
     embed = discord.Embed(
-        title="⚔️ CAÇADA — VIGILLANT",
+        title="💀 Emboscada!",
         description=(
-            f"_{mob_line}_\n\n"
-            f"👹 Alvo: **{m['nome']}**\n"
-            f"🎲 D20: **{d20}**  →  {rotulo}\n\n"
-            f"⚔️ Dano causado: **{dano}**\n"
-            f"💥 Dano recebido: **{tomou}**\n\n"
-            f"❤ HP: **{p['hp']}**  |  🥵 Stamina: **{p['stamina']}/{p['max_stamina']}**"
+            "Bandidos armados cercam você.\n\n"
+            "💰 **Pagar 100 gold** e eles vão embora.\n"
+            "⚔️ **Lutar** (D20).\n\n"
+            "_Vigillant observa em silêncio…_"
         ),
-        color=discord.Color.orange()
+        color=discord.Color.red()
+    )
+    await interaction.response.send_message(embed=embed, view=BandidosView(interaction.user.id, forca), ephemeral=False)
+    return
+
+ids = list(MONSTROS.keys())
+pesos = [int(MONSTROS[k].get("peso", 1)) for k in ids]
+mob_id = random.choices(ids, weights=pesos, k=1)[0]
+m = MONSTROS[mob_id]
+
+tag = "orgânico"
+if "cibernético" in m["tags"]:
+    tag = "cibernético"
+if "demoníaco" in m["tags"]:
+    tag = "demoníaco"
+mob_line = random.choice(MOB_QUOTES[tag])
+
+d20 = rolar_d20()
+if d20 == 20:
+    mult = 2.0
+    rotulo = "💥 **CRÍTICO!**"
+elif d20 >= 14:
+    mult = 1.25
+    rotulo = "⚔️ **Acerto forte**"
+elif d20 >= 8:
+    mult = 1.0
+    rotulo = "✅ **Acerto**"
+else:
+    mult = 0.0
+    rotulo = "❌ **Errou**"
+
+classe = p["classe"]
+atk = await total_stat(p, "atk")
+mag = await total_stat(p, "magia")
+base = atk if classe in ["barbaro", "assassino", "arqueiro", "guerreiro"] else mag
+dano = int(max(0, base) * mult)
+
+    defesa = await total_stat(p, "defesa")
+dano_monstro = max(0, int(m["atk"]) - defesa)
+
+mob_hp = int(m["hp"]) - dano
+tomou = dano_monstro if mob_hp > 0 else 0
+p["hp"] = max(0, int(p["hp"]) - tomou)
+
+ganhou = (mob_hp <= 0 and dano > 0)
+
+xp_gain = int(m["xp"])
+gold_gain = int(m["gold"])
+
+if dano == 0:
+    xp_gain = max(0, xp_gain // 3)
+    gold_gain = max(0, gold_gain // 3)
+
+drop_txt = ""
+
+if ganhou:
+    p["xp"] += xp_gain
+    p["gold"] += gold_gain
+
+    eh_raro = int(m.get("peso", 99)) <= 4
+
+    if eh_raro and random.random() < DROP_RARO_CHANCE:
+        drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
+        if drop_item:
+            p.setdefault("inventario", []).append(drop_item["item_id"])
+            drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
+
+upou = await try_auto_level(p)
+await save_player(p)
+
+embed = discord.Embed(
+    title="⚔️ CAÇADA — VIGILLANT",
+    description=(
+        f"_{mob_line}_\n\n"
+        f"👹 Alvo: **{m['nome']}**\n"
+        f"🎲 D20: **{d20}**  →  {rotulo}\n\n"
+        f"⚔️ Dano causado: **{dano}**\n"
+        f"💥 Dano recebido: **{tomou}**\n\n"
+        f"❤ HP: **{p['hp']}**  |  🥵 Stamina: **{p['stamina']}/{p['max_stamina']}**"
+    ),
+    color=discord.Color.orange()
+)
+
+if ganhou:
+    embed.add_field(
+        name="🏆 Vitória",
+        value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold{drop_txt}",
+        inline=False
+    )
+else:
+    embed.add_field(
+        name="⚠️ Resultado",
+        value="O alvo resistiu / você falhou. Reorganize-se e tente novamente.",
+        inline=False
     )
 
-    if ganhou:
-        embed.add_field(
-            name="🏆 Vitória",
-            value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold{drop_txt}",
-            inline=False
-        )
-    else:
-        embed.add_field(
-            name="⚠️ Resultado",
-            value="O alvo resistiu / você falhou. Reorganize-se e tente novamente.",
-            inline=False
-        )
+if upou:
+    embed.add_field(
+        name="🆙 LEVEL UP",
+        value=f"Você upou **{upou}** nível(is)! (+{upou*3} pontos livres + auto por classe)",
+        inline=False
+    )
 
-    if upou:
-        embed.add_field(
-            name="🆙 LEVEL UP",
-            value=f"Você upou **{upou}** nível(is)! (+{upou*3} pontos livres + auto por classe)",
-            inline=False
-        )
+if random.random() < 0.25:
+    embed.set_footer(text=f"Vigillant: “{random.choice(VIGILLANT_QUOTES)}”")
 
-    if random.random() < 0.25:
-        embed.set_footer(text=f"Vigillant: “{random.choice(VIGILLANT_QUOTES)}”")
-
-    await interaction.response.send_message(embed=embed, ephemeral=False)
+await interaction.response.send_message(embed=embed, ephemeral=False)
 
 # ==============================
 # COMANDOS — MESTRE
@@ -1880,22 +1880,22 @@ async def cacar(interaction: discord.Interaction):
 @only_master_channel()
 @app_commands.describe(modo="on ou off")
 async def narracao(interaction: discord.Interaction, modo: str):
-    if not interaction.guild:
-        await interaction.response.send_message("❌ Use em servidor.", ephemeral=True)
-        return
-    modo = modo.lower().strip()
-    if modo not in ["on", "off"]:
-        await interaction.response.send_message("❌ Use on/off.", ephemeral=True)
-        return
-    NARRACAO_GUILD[interaction.guild.id] = (modo == "on")
-    await interaction.response.send_message(f"📖 Modo narração: **{modo.upper()}**", ephemeral=False)
+if not interaction.guild:
+    await interaction.response.send_message("❌ Use em servidor.", ephemeral=True)
+    return
+modo = modo.lower().strip()
+if modo not in ["on", "off"]:
+    await interaction.response.send_message("❌ Use on/off.", ephemeral=True)
+    return
+NARRACAO_GUILD[interaction.guild.id] = (modo == "on")
+await interaction.response.send_message(f"📖 Modo narração: **{modo.upper()}**", ephemeral=False)
 
 # ---------- DAR XP / GOLD (individual / all / todos_exceto)
 
 async def list_all_player_ids() -> List[int]:
-    async with aiosqlite.connect(DB_FILE) as db:
-        cur = await db.execute("SELECT user_id FROM players")
-        return [int(r[0]) for r in await cur.fetchall()]
+async with aiosqlite.connect(DB_FILE) as db:
+    cur = await db.execute("SELECT user_id FROM players")
+    return [int(r[0]) for r in await cur.fetchall()]
 
 @tree.command(name="darxp", description="(Mestre) Dar XP (jogador | all | todos_exceto).")
 @only_master_channel()
@@ -2596,6 +2596,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
