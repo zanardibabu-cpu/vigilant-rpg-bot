@@ -1727,17 +1727,20 @@ await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", e
 # /CACAR — D20 AUTOMÁTICO
 # ==============================
 
-@tree.command(name="cacar", description="Caçar monstros e eventos (D20 automático).")
-@only_channel(CANAL_CACAR_ID, "sala-de-cacar")
+@tree.command(name="cacar", description="Caçar nas terras da Diretriz.")
 async def cacar(interaction: discord.Interaction):
-    if await blocked_by_narration(interaction):
-    return
 
-p = await require_player(interaction)
-if not p:
-    return
-if await blocked_by_rest(interaction, p):
-    return
+    if await blocked_by_narration(interaction):
+        return
+
+    p = await require_player(interaction)
+    if not p:
+        return
+
+    if await blocked_by_rest(interaction, p):
+        return
+
+    # resto do código aqui...
 
 now = now_ts()
 last = int(p.get("last_hunt_ts", 0))
@@ -2596,6 +2599,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
