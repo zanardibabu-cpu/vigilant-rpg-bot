@@ -241,7 +241,7 @@ def only_channel(channel_id: int, friendly: str):
     return app_commands.check(predicate)
 
 def only_master_channel():
-async def predicate(interaction: discord.Interaction) -> bool:
+    async def predicate(interaction: discord.Interaction) -> bool:
         if not eh_mestre(interaction.user.id):
             msg = "❌ Apenas o **Mestre** pode usar isso."
             if interaction.response.is_done():
@@ -2624,6 +2624,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
