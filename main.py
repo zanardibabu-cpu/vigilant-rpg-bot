@@ -1818,19 +1818,18 @@ async def cacar(interaction: discord.Interaction):
         gold_gain = max(0, gold_gain // 3)
 
     if ganhou:
-        p["xp"] += xp_gain
-        p["gold"] += gold_gain
+    p["xp"] += xp_gain
+    p["gold"] += gold_gain
 
-            drop_txt = ""
+    drop_txt = ""  # ← MESMO NÍVEL do xp/gold
 
-        # Raro = peso <= 4
-        eh_raro = int(m.get("peso", 99)) <= 4
+    eh_raro = int(m.get("peso", 99)) <= 4
 
-        if eh_raro and random.random() < DROP_RARO_CHANCE:
-            drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
-            if drop_item:
-                p.setdefault("inventario", []).append(drop_item["item_id"])
-                drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
+    if eh_raro and random.random() < DROP_RARO_CHANCE:
+        drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
+        if drop_item:
+            p.setdefault("inventario", []).append(drop_item["item_id"])
+            drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
 
     upou = await try_auto_level(p)
     await save_player(p)
@@ -2589,6 +2588,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
