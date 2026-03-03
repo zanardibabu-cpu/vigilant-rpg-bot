@@ -864,10 +864,16 @@ class ClasseSelect(discord.ui.Select):
                 value=cls,
                 description=f"HP {st['hp_base']} | Mana {st['mana_base']} | ATK {st['atk']} | MAG {st['magia']} | DEF {st['defesa']}"
             ))
-        super().__init__(placeholder="Escolha sua classe…", min_values=1, max_values=1, options=opts)
+
+        super().__init__(
+            placeholder="Escolha sua classe…",
+            min_values=1,
+            max_values=1,
+            options=opts,
+            custom_id="classe_select_v1"
+        )
 
     async def callback(self, interaction: discord.Interaction):
-        # ✅ responde rápido pra não dar "interação falhou"
         await interaction.response.defer(ephemeral=True)
 
         try:
@@ -882,7 +888,6 @@ class ClasseSelect(discord.ui.Select):
 
             classe = self.values[0]
             p = build_new_player(interaction.user.id, classe)
-
             await save_player(p)
 
             embed = discord.Embed(
@@ -891,30 +896,30 @@ class ClasseSelect(discord.ui.Select):
                     f"**{interaction.user.mention}** agora é **{classe.upper()}**.\n\n"
                     f"⭐ Nível: **1**\n"
                     f"❤ HP: **{p['hp']}** | 🔵 Mana: **{p['mana']}**\n"
-                    f"💰 Gold inicial: **{p['gold']}**\n\n"
-                    f"_👁️ Vigillant: “Mais um nome para a estatística…”_"
+                    f"💰 Gold inicial: **{p['gold']}**"
                 ),
                 color=discord.Color.dark_grey()
             )
-            await interaction.followup.send(embed=embed, ephemeral=False)
 
-        except Exception as e:
-            # ✅ log no console
-            import traceback
-            tb = traceback.format_exc()
-            print("ERRO NO SELECT:", tb)
-
-            # ✅ avisa o mestre no canal mestre (se existir)
+            # remove o menu depois de escolher
             try:
-                if interaction.guild and CANAL_MESTRE_ID:
-                    ch = interaction.guild.get_channel(CANAL_MESTRE_ID)
-                    if ch:
-                        msg = f"⚠️ **Erro ao escolher classe**\n```{tb[:1800]}```"
-                        await ch.send(msg)
+                await interaction.message.edit(view=None)
             except Exception:
                 pass
 
-            await interaction.followup.send("❌ Deu erro ao registrar. O mestre recebeu o log. (Veja #Sala-do-mestre)", ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=False)
+
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(tb)
+            await interaction.followup.send("❌ Erro ao registrar. Veja os logs.", ephemeral=True)
+
+
+class ClasseView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(ClasseSelect())
 
 # ==============================
 # LOJA PAGINADA (DB)
@@ -2680,6 +2685,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
