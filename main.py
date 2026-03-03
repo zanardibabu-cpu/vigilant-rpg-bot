@@ -855,7 +855,7 @@ def build_new_player(user_id: int, classe: str) -> dict:
     }
 
 
-            class ClasseSelect(discord.ui.Select):
+class ClasseSelect(discord.ui.Select):
     def __init__(self):
         opts = []
         for cls, st in CLASSES.items():
@@ -2680,6 +2680,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
