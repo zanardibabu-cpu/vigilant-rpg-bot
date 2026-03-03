@@ -854,7 +854,8 @@ def build_new_player(user_id: int, classe: str) -> dict:
         "spellbook": [],
     }
 
-class ClasseSelect(discord.ui.Select):
+
+            class ClasseSelect(discord.ui.Select):
     def __init__(self):
         opts = []
         for cls, st in CLASSES.items():
@@ -865,37 +866,55 @@ class ClasseSelect(discord.ui.Select):
             ))
         super().__init__(placeholder="Escolha sua classe…", min_values=1, max_values=1, options=opts)
 
-async def callback(self, interaction: discord.Interaction):
-        if interaction.channel_id != CANAL_BEM_VINDO_ID:
-            await interaction.response.send_message("❌ Criação de personagem só no canal de **bem-vindo**.", ephemeral=True)
-            return
+    async def callback(self, interaction: discord.Interaction):
+        # ✅ responde rápido pra não dar "interação falhou"
+        await interaction.response.defer(ephemeral=True)
 
-        existing = await get_player(interaction.user.id)
-        if existing:
-            await interaction.response.send_message("⚠️ Você já tem personagem. Use **/perfil**.", ephemeral=True)
-            return
+        try:
+            if interaction.channel_id != CANAL_BEM_VINDO_ID:
+                await interaction.followup.send("❌ Criação de personagem só no canal de **bem-vindo**.", ephemeral=True)
+                return
 
-        classe = self.values[0]
-        p = build_new_player(interaction.user.id, classe)
-        await save_player(p)
+            existing = await get_player(interaction.user.id)
+            if existing:
+                await interaction.followup.send("⚠️ Você já tem personagem. Use **/perfil**.", ephemeral=True)
+                return
 
-        embed = discord.Embed(
-            title="✅ Registro Concluído",
-            description=(
-                f"**{interaction.user.mention}** agora é **{classe.upper()}**.\n\n"
-                f"⭐ Nível: **1**\n"
-                f"❤ HP: **{p['hp']}** | 🔵 Mana: **{p['mana']}**\n"
-                f"💰 Gold inicial: **{p['gold']}**\n\n"
-                f"_👁️ Vigillant: “Mais um nome para a estatística…”_"
-            ),
-            color=discord.Color.dark_grey()
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+            classe = self.values[0]
+            p = build_new_player(interaction.user.id, classe)
 
-class ClasseView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=60)
-        self.add_item(ClasseSelect())
+            await save_player(p)
+
+            embed = discord.Embed(
+                title="✅ Registro Concluído",
+                description=(
+                    f"**{interaction.user.mention}** agora é **{classe.upper()}**.\n\n"
+                    f"⭐ Nível: **1**\n"
+                    f"❤ HP: **{p['hp']}** | 🔵 Mana: **{p['mana']}**\n"
+                    f"💰 Gold inicial: **{p['gold']}**\n\n"
+                    f"_👁️ Vigillant: “Mais um nome para a estatística…”_"
+                ),
+                color=discord.Color.dark_grey()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=False)
+
+        except Exception as e:
+            # ✅ log no console
+            import traceback
+            tb = traceback.format_exc()
+            print("ERRO NO SELECT:", tb)
+
+            # ✅ avisa o mestre no canal mestre (se existir)
+            try:
+                if interaction.guild and CANAL_MESTRE_ID:
+                    ch = interaction.guild.get_channel(CANAL_MESTRE_ID)
+                    if ch:
+                        msg = f"⚠️ **Erro ao escolher classe**\n```{tb[:1800]}```"
+                        await ch.send(msg)
+            except Exception:
+                pass
+
+            await interaction.followup.send("❌ Deu erro ao registrar. O mestre recebeu o log. (Veja #Sala-do-mestre)", ephemeral=True)
 
 # ==============================
 # LOJA PAGINADA (DB)
@@ -2661,6 +2680,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
