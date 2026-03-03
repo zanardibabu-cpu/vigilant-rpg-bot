@@ -6,8 +6,7 @@ import random
 import aiosqlite
 import discord
 from discord import app_commands
-from typing import Optional, List, Dict, Any
-
+from typing import Optional, List, Dict, Any, Tuple
 # ==========================
 # CONFIG / IDs
 # ==========================
@@ -2509,6 +2508,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
