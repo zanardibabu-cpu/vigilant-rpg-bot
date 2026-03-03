@@ -241,7 +241,7 @@ def only_channel(channel_id: int, friendly: str):
     return app_commands.check(predicate)
 
 def only_master_channel():
-    async def predicate(interaction: discord.Interaction) -> bool:
+async def predicate(interaction: discord.Interaction) -> bool:
         if not eh_mestre(interaction.user.id):
             msg = "❌ Apenas o **Mestre** pode usar isso."
             if interaction.response.is_done():
@@ -876,7 +876,7 @@ class ClasseSelect(discord.ui.Select):
             ))
         super().__init__(placeholder="Escolha sua classe…", min_values=1, max_values=1, options=opts)
 
-    async def callback(self, interaction: discord.Interaction):
+async def callback(self, interaction: discord.Interaction):
         if interaction.channel_id != CANAL_BEM_VINDO_ID:
             await interaction.response.send_message("❌ Criação de personagem só no canal de **bem-vindo**.", ephemeral=True)
             return
@@ -1668,59 +1668,68 @@ async def livro_equipar(interaction: discord.Interaction, spell_id: str):
         await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
         return
 
-# regra: somente fora de combate/narração OFF
-if narration_is_on(interaction):
-    await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
-    return
+    # regra: somente fora de combate/narração OFF
+    if narration_is_on(interaction):
+        await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
+        return
 
-spell_id = spell_id.lower().strip()
-s = await spell_get(spell_id)
-if not s or int(s.get("deleted", 0)) == 1:
-    await interaction.response.send_message("❌ Magia não existe (ou foi removida).", ephemeral=True)
-    return
+    spell_id = spell_id.lower().strip()
+    s = await spell_get(spell_id)
+    if not s or int(s.get("deleted", 0)) == 1:
+        await interaction.response.send_message("❌ Magia não existe (ou foi removida).", ephemeral=True)
+        return
 
-classes = s.get("classes") or []
-if p["classe"] not in classes:
-    await interaction.response.send_message(f"❌ Essa magia não é para sua classe. Permitidas: {', '.join(classes)}", ephemeral=True)
-    return
+    classes = s.get("classes") or []
+    if p["classe"] not in classes:
+        await interaction.response.send_message(
+            f"❌ Essa magia não é para sua classe. Permitidas: {', '.join(classes)}",
+            ephemeral=True
+        )
+        return
 
-book = p.get("spellbook") or []
-if spell_id in book:
-    await interaction.response.send_message("⚠️ Essa magia já está no seu livro.", ephemeral=True)
-    return
-if len(book) >= SPELLBOOK_SLOTS:
-    await interaction.response.send_message(f"❌ Seu livro está cheio (máx {SPELLBOOK_SLOTS}). Desequipe uma primeiro.", ephemeral=True)
-    return
+    book = p.get("spellbook") or []
+    if spell_id in book:
+        await interaction.response.send_message("⚠️ Essa magia já está no seu livro.", ephemeral=True)
+        return
+    if len(book) >= SPELLBOOK_SLOTS:
+        await interaction.response.send_message(
+            f"❌ Seu livro está cheio (máx {SPELLBOOK_SLOTS}). Desequipe uma primeiro.",
+            ephemeral=True
+        )
+        return
 
-book.append(spell_id)
-p["spellbook"] = book
+    book.append(spell_id)
+    p["spellbook"] = book
     await save_player(p)
+
     await interaction.response.send_message(f"✅ Equipou **{s['nome']}** no livro.", ephemeral=True)
+
 
 @tree.command(name="livro_desequipar", description="Desequipar magia do livro (mago/clérigo).")
 @app_commands.describe(spell_id="ID da magia")
 async def livro_desequipar(interaction: discord.Interaction, spell_id: str):
-p = await require_player(interaction)
-if not p:
-    return
+    p = await require_player(interaction)
+    if not p:
+        return
 
-if not can_use_spellbook(p["classe"]):
-    await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
-    return
+    if not can_use_spellbook(p["classe"]):
+        await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
+        return
 
-if narration_is_on(interaction):
-    await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
-    return
+    if narration_is_on(interaction):
+        await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
+        return
 
-spell_id = spell_id.lower().strip()
-book = p.get("spellbook") or []
-if spell_id not in book:
-    await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
-    return
+    spell_id = spell_id.lower().strip()
+    book = p.get("spellbook") or []
+    if spell_id not in book:
+        await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
+        return
 
-book.remove(spell_id)
-p["spellbook"] = book
+    book.remove(spell_id)
+    p["spellbook"] = book
     await save_player(p)
+
     await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", ephemeral=True)
 
 # ==============================
@@ -2613,6 +2622,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
