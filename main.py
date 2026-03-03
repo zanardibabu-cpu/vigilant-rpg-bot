@@ -1801,7 +1801,7 @@ async def cacar(interaction: discord.Interaction):
     base = atk if classe in ["barbaro", "assassino", "arqueiro", "guerreiro"] else mag
     dano = int(max(0, base) * mult)
 
-    defesa = await total_stat(p, "defesa")
+        defesa = await total_stat(p, "defesa")
     dano_monstro = max(0, int(m["atk"]) - defesa)
 
     mob_hp = int(m["hp"]) - dano
@@ -1817,19 +1817,19 @@ async def cacar(interaction: discord.Interaction):
         xp_gain = max(0, xp_gain // 3)
         gold_gain = max(0, gold_gain // 3)
 
+    drop_txt = ""
+
     if ganhou:
-    p["xp"] += xp_gain
-    p["gold"] += gold_gain
+        p["xp"] += xp_gain
+        p["gold"] += gold_gain
 
-    drop_txt = ""  # ← MESMO NÍVEL do xp/gold
+        eh_raro = int(m.get("peso", 99)) <= 4
 
-    eh_raro = int(m.get("peso", 99)) <= 4
-
-    if eh_raro and random.random() < DROP_RARO_CHANCE:
-        drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
-        if drop_item:
-            p.setdefault("inventario", []).append(drop_item["item_id"])
-            drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
+        if eh_raro and random.random() < DROP_RARO_CHANCE:
+            drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
+            if drop_item:
+                p.setdefault("inventario", []).append(drop_item["item_id"])
+                drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
 
     upou = await try_auto_level(p)
     await save_player(p)
@@ -1849,15 +1849,23 @@ async def cacar(interaction: discord.Interaction):
 
     if ganhou:
         embed.add_field(
-    name="🏆 Vitória",
-    value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold{drop_txt}",
-    inline=False
-)
+            name="🏆 Vitória",
+            value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold{drop_txt}",
+            inline=False
+        )
     else:
-        embed.add_field(name="⚠️ Resultado", value="O alvo resistiu / você falhou. Reorganize-se e tente novamente.", inline=False)
+        embed.add_field(
+            name="⚠️ Resultado",
+            value="O alvo resistiu / você falhou. Reorganize-se e tente novamente.",
+            inline=False
+        )
 
     if upou:
-        embed.add_field(name="🆙 LEVEL UP", value=f"Você upou **{upou}** nível(is)! (+{upou*3} pontos livres + auto por classe)", inline=False)
+        embed.add_field(
+            name="🆙 LEVEL UP",
+            value=f"Você upou **{upou}** nível(is)! (+{upou*3} pontos livres + auto por classe)",
+            inline=False
+        )
 
     if random.random() < 0.25:
         embed.set_footer(text=f"Vigillant: “{random.choice(VIGILLANT_QUOTES)}”")
@@ -2588,6 +2596,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
