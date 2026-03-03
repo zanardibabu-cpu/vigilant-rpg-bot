@@ -1702,21 +1702,21 @@ await interaction.response.send_message(f"✅ Equipou **{s['nome']}** no livro."
 async def livro_desequipar(interaction: discord.Interaction, spell_id: str):
 p = await require_player(interaction)
 if not p:
-    return
+return
 
 if not can_use_spellbook(p["classe"]):
-    await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
-    return
+await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
+return
 
 if narration_is_on(interaction):
-    await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
-    return
+await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
+return
 
 spell_id = spell_id.lower().strip()
 book = p.get("spellbook") or []
 if spell_id not in book:
-    await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
-    return
+await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
+return
 
 book.remove(spell_id)
 p["spellbook"] = book
@@ -1730,7 +1730,7 @@ await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", e
 @tree.command(name="cacar", description="Caçar monstros e eventos (D20 automático).")
 @only_channel(CANAL_CACAR_ID, "sala-de-cacar")
 async def cacar(interaction: discord.Interaction):
-if await blocked_by_narration(interaction):
+    if await blocked_by_narration(interaction):
     return
 
 p = await require_player(interaction)
@@ -2596,6 +2596,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
