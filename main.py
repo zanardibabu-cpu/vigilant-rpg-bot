@@ -1893,26 +1893,37 @@ async def cacar(interaction: discord.Interaction):
 # COMANDOS — MESTRE
 # ==============================
 
-@tree.command(name="narracao", description="(Mestre) Ativar/desativar modo narração (pausa /cacar e trava livro).")
+@tree.command(
+    name="narracao",
+    description="(Mestre) Ativar/desativar modo narração (pausa /cacar e trava livro)."
+)
 @only_master_channel()
 @app_commands.describe(modo="on ou off")
 async def narracao(interaction: discord.Interaction, modo: str):
-if not interaction.guild:
-    await interaction.response.send_message("❌ Use em servidor.", ephemeral=True)
-    return
-modo = modo.lower().strip()
-if modo not in ["on", "off"]:
-    await interaction.response.send_message("❌ Use on/off.", ephemeral=True)
-    return
-NARRACAO_GUILD[interaction.guild.id] = (modo == "on")
-await interaction.response.send_message(f"📖 Modo narração: **{modo.upper()}**", ephemeral=False)
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Use em servidor.", ephemeral=True)
+        return
+
+    modo = (modo or "").lower().strip()
+    if modo not in ["on", "off"]:
+        await interaction.response.send_message("❌ Use on/off.", ephemeral=True)
+        return
+
+    NARRACAO_GUILD[interaction.guild.id] = (modo == "on")
+    await interaction.response.send_message(
+        f"📖 Modo narração: **{modo.upper()}**",
+        ephemeral=False
+    )
+
 
 # ---------- DAR XP / GOLD (individual / all / todos_exceto)
 
 async def list_all_player_ids() -> List[int]:
-async with aiosqlite.connect(DB_FILE) as db:
-    cur = await db.execute("SELECT user_id FROM players")
-    return [int(r[0]) for r in await cur.fetchall()]
+    async with aiosqlite.connect(DB_FILE) as db:
+        cur = await db.execute("SELECT user_id FROM players")
+        rows = await cur.fetchall()
+        return [int(r[0]) for r in rows]
+
 
 @tree.command(name="darxp", description="(Mestre) Dar XP (jogador | all | todos_exceto).")
 @only_master_channel()
@@ -1921,77 +1932,114 @@ async with aiosqlite.connect(DB_FILE) as db:
     quantidade="Quantidade de XP",
     exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
 )
-async def darxp(interaction: discord.Interaction, alvo: str, quantidade: int, exceto: Optional[discord.Member] = None):
+async def darxp(
+    interaction: discord.Interaction,
+    alvo: str,
+    quantidade: int,
+    exceto: Optional[discord.Member] = None
+):
     if quantidade <= 0:
         await interaction.response.send_message("❌ Quantidade inválida.", ephemeral=True)
         return
 
-    alvo = (alvo or "").lower().strip()
+    alvo_norm = (alvo or "").lower().strip()
 
-    if alvo == "all":
+    # ------------------------
+    # ALL
+    # ------------------------
+    if alvo_norm == "all":
         ids = await list_all_player_ids()
         total = 0
         ups: List[str] = []
+
         for uid in ids:
             p = await get_player(uid)
             if not p:
                 continue
+
             p["xp"] += quantidade
             upou = await try_auto_level(p)
             await save_player(p)
             total += 1
+
             if upou:
                 ups.append(f"<@{uid}> (+{upou})")
+
         msg = f"👑 Mestre deu **{quantidade} XP** para **{total}** jogadores (ALL)."
         if ups:
             msg += "\n🆙 Uparam: " + ", ".join(ups[:20]) + ("…" if len(ups) > 20 else "")
+
         await interaction.response.send_message(msg, ephemeral=False)
         return
 
-    if alvo == "todos_exceto":
+    # ------------------------
+    # TODOS_EXCETO
+    # ------------------------
+    if alvo_norm == "todos_exceto":
         if not exceto:
-            await interaction.response.send_message("❌ Use: /darxp alvo:todos_exceto quantidade:X exceto:@Fulano", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Use: /darxp alvo:todos_exceto quantidade:X exceto:@Fulano",
+                ephemeral=True
+            )
             return
+
         ids = await list_all_player_ids()
         total = 0
         ups: List[str] = []
+
         for uid in ids:
             if uid == exceto.id:
                 continue
+
             p = await get_player(uid)
             if not p:
                 continue
+
             p["xp"] += quantidade
             upou = await try_auto_level(p)
             await save_player(p)
             total += 1
+
             if upou:
                 ups.append(f"<@{uid}> (+{upou})")
+
         msg = f"👑 Mestre deu **{quantidade} XP** para **{total}** jogadores (todos exceto {exceto.mention})."
         if ups:
             msg += "\n🆙 Uparam: " + ", ".join(ups[:20]) + ("…" if len(ups) > 20 else "")
+
         await interaction.response.send_message(msg, ephemeral=False)
         return
 
-    # caso normal: alvo é menção/ID no texto (simplificado)
-    # se você preferir obrigatório ser discord.Member, trocamos assinatura.
-    await interaction.response.send_message("❌ Use alvo: **all** ou **todos_exceto**. (Para individual, use /darxp_individual)", ephemeral=True)
+    # ------------------------
+    # JOGADOR INDIVIDUAL (mencionar)
+    # ------------------------
+    # Aqui você pode decidir o formato: alvo pode ser "<@id>" ou nome.
+    # Vou suportar "<@id>" e "<@!id>" (mencionar no Discord).
+    alvo_txt = (alvo or "").strip()
+    uid = None
+    if alvo_txt.startswith("<@") and alvo_txt.endswith(">"):
+        alvo_txt = alvo_txt.replace("<@", "").replace(">", "").replace("!", "")
+        if alvo_txt.isdigit():
+            uid = int(alvo_txt)
 
-@tree.command(name="darxp_individual", description="(Mestre) Dar XP para 1 jogador.")
-@only_master_channel()
-async def darxp_individual(interaction: discord.Interaction, membro: discord.Member, quantidade: int):
-    if quantidade <= 0:
-        await interaction.response.send_message("❌ Quantidade inválida.", ephemeral=True)
+    if uid is None:
+        await interaction.response.send_message(
+            "❌ Para alvo individual, mencione o jogador (ex: `<@123>`), ou use 'all' / 'todos_exceto'.",
+            ephemeral=True
+        )
         return
-    p = await get_player(membro.id)
+
+    p = await get_player(uid)
     if not p:
         await interaction.response.send_message("❌ Jogador sem personagem.", ephemeral=True)
         return
+
     p["xp"] += quantidade
     upou = await try_auto_level(p)
     await save_player(p)
+
     await interaction.response.send_message(
-        f"👑 Mestre deu **{quantidade} XP** para {membro.mention}."
+        f"👑 Mestre deu **{quantidade} XP** para <@{uid}>."
         + (f" 🆙 (upou {upou}x)" if upou else ""),
         ephemeral=False
     )
@@ -2613,6 +2661,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
