@@ -1694,34 +1694,34 @@ if len(book) >= SPELLBOOK_SLOTS:
 
 book.append(spell_id)
 p["spellbook"] = book
-await save_player(p)
-await interaction.response.send_message(f"✅ Equipou **{s['nome']}** no livro.", ephemeral=True)
+    await save_player(p)
+    await interaction.response.send_message(f"✅ Equipou **{s['nome']}** no livro.", ephemeral=True)
 
 @tree.command(name="livro_desequipar", description="Desequipar magia do livro (mago/clérigo).")
 @app_commands.describe(spell_id="ID da magia")
 async def livro_desequipar(interaction: discord.Interaction, spell_id: str):
 p = await require_player(interaction)
 if not p:
-return
+    return
 
 if not can_use_spellbook(p["classe"]):
-await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
-return
+    await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
+    return
 
 if narration_is_on(interaction):
-await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
-return
+    await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
+    return
 
 spell_id = spell_id.lower().strip()
 book = p.get("spellbook") or []
 if spell_id not in book:
-await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
-return
+    await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
+    return
 
 book.remove(spell_id)
 p["spellbook"] = book
-await save_player(p)
-await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", ephemeral=True)
+    await save_player(p)
+    await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", ephemeral=True)
 
 # ==============================
 # /CACAR — D20 AUTOMÁTICO
@@ -2613,6 +2613,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
