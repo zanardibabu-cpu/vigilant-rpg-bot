@@ -241,23 +241,12 @@ def only_channel(channel_id: int, friendly: str):
     return app_commands.check(predicate)
 
 def only_master_channel():
-    async def predicate(interaction: discord.Interaction) -> bool:
-        if not eh_mestre(interaction.user.id):
-            msg = "❌ Apenas o **Mestre** pode usar isso."
-            if interaction.response.is_done():
-                await interaction.followup.send(msg, ephemeral=True)
-            else:
-                await interaction.response.send_message(msg, ephemeral=True)
-            return False
 
-        if CANAL_MESTRE_ID and interaction.channel_id != CANAL_MESTRE_ID:
-            msg = "❌ Comandos do mestre só na **#Sala do mestre**."
-            if interaction.response.is_done():
-                await interaction.followup.send(msg, ephemeral=True)
-            else:
-                await interaction.response.send_message(msg, ephemeral=True)
+    async def predicate(interaction: discord.Interaction) -> bool:
+        if not interaction.user:
             return False
-        return True
+        return interaction.user.id == MESTRE_ID
+
     return app_commands.check(predicate)
 
 async def blocked_by_rest(interaction: discord.Interaction, p: dict) -> bool:
@@ -2624,6 +2613,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
