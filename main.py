@@ -1702,8 +1702,10 @@ async def livro_equipar(interaction: discord.Interaction, spell_id: str):
     p["spellbook"] = book
     await save_player(p)
 
-    await interaction.response.send_message(f"✅ Equipou **{s['nome']}** no livro.", ephemeral=True)
-
+    await interaction.response.send_message(
+        f"✅ Equipou **{s['nome']}** no livro.",
+        ephemeral=True
+    )
 
 @tree.command(name="livro_desequipar", description="Desequipar magia do livro (mago/clérigo).")
 @app_commands.describe(spell_id="ID da magia")
@@ -2622,6 +2624,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
