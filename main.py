@@ -110,17 +110,52 @@ AUTO_UP: Dict[str, str] = {
 
 # Monstros ponderados (fortes = raros)
 MONSTROS = {
-    "rato_irradiado":      {"nome": "Rato Irradiado",            "hp": 20,  "atk": 5,  "xp": 12,  "gold": 14,  "peso": 26, "tags": ["orgânico", "radiação"]},
-    "lobo_mutante":        {"nome": "Lobo Mutante",              "hp": 30,  "atk": 7,  "xp": 18,  "gold": 22,  "peso": 22, "tags": ["orgânico"]},
-    "carnical_radioativo": {"nome": "Carniçal Radioativo",       "hp": 38,  "atk": 9,  "xp": 26,  "gold": 32,  "peso": 18, "tags": ["orgânico", "radiação"]},
-    "drone_vigia":         {"nome": "Drone Vigia da Diretriz",   "hp": 45,  "atk": 12, "xp": 45,  "gold": 60,  "peso": 12, "tags": ["cibernético", "diretriz"]},
-    "vampiro_errante":     {"nome": "Vampiro Errante",           "hp": 70,  "atk": 16, "xp": 90,  "gold": 130, "peso": 6,  "tags": ["orgânico", "vampiro"]},
+    "rato_irradiado":      {"nome": "Rato Irradiado",            "hp": 5,  "atk": 5,  "xp": 12,  "gold": 14,  "peso": 26, "tags": ["orgânico", "radiação"]},
+    "lobo_mutante":        {"nome": "Lobo Mutante",              "hp": 6,  "atk": 7,  "xp": 18,  "gold": 22,  "peso": 22, "tags": ["orgânico"]},
+    "carnical_radioativo": {"nome": "Carniçal Radioativo",       "hp": 6,  "atk": 9,  "xp": 26,  "gold": 32,  "peso": 18, "tags": ["orgânico", "radiação"]},
+    "drone_vigia":         {"nome": "Drone Vigia da Diretriz",   "hp": 11,  "atk": 12, "xp": 45,  "gold": 60,  "peso": 12, "tags": ["cibernético", "diretriz"]},
+    "vampiro_errante":     {"nome": "Vampiro Errante",           "hp": 14,  "atk": 16, "xp": 90,  "gold": 130, "peso": 6,  "tags": ["orgânico", "vampiro"]},
     "demonio_invadido":    {"nome": "Demônio Invadido",          "hp": 95,  "atk": 20, "xp": 140, "gold": 200, "peso": 4,  "tags": ["demoníaco"]},
-    "ciborgue_diretriz":   {"nome": "Ciborgue da Mente-Colmeia", "hp": 120, "atk": 24, "xp": 190, "gold": 260, "peso": 3,  "tags": ["cibernético", "diretriz"]},
-    "sentinela_antigo":    {"nome": "Sentinela Antigo",          "hp": 160, "atk": 30, "xp": 280, "gold": 360, "peso": 2,  "tags": ["cibernético", "antigo"]},
-    "executor_vigillant":  {"nome": "Executor de VIGILLANT",     "hp": 220, "atk": 38, "xp": 450, "gold": 600, "peso": 1,  "tags": ["cibernético", "diretriz", "boss"]},
+    "ciborgue_diretriz":   {"nome": "Ciborgue da Mente-Colmeia", "hp": 30, "atk": 24, "xp": 190, "gold": 260, "peso": 3,  "tags": ["cibernético", "diretriz"]},
+    "sentinela_antigo":    {"nome": "Sentinela Antigo",          "hp": 40, "atk": 30, "xp": 280, "gold": 360, "peso": 2,  "tags": ["cibernético", "antigo"]},
+    "executor_vigillant":  {"nome": "Executor de VIGILLANT",     "hp": 45, "atk": 38, "xp": 450, "gold": 600, "peso": 1,  "tags": ["cibernético", "diretriz", "boss"]},
 }
+# ==============================
+# CONFIG DE PROBABILIDADES
+# ==============================
 
+INIMIGOS_FRACOS_CHANCE = 0.38
+DROP_FRACO_CHANCE = 0.04
+DROP_RARO_CHANCE = 0.35
+
+# ==============================
+# INIMIGOS FRACOS (sempre morrem)
+# ==============================
+
+INIMIGOS_FRACOS = [
+    {"nome": "Cachorro Magro",   "xp": (2, 6),  "gold": (1, 6),  "tags": ["orgânico"]},
+    {"nome": "Rato de Esgoto",   "xp": (1, 5),  "gold": (0, 4),  "tags": ["orgânico"]},
+    {"nome": "Drone Defeituoso", "xp": (3, 8),  "gold": (1, 8),  "tags": ["cibernético", "diretriz"]},
+    {"nome": "Ladrão Maneta",    "xp": (4, 10), "gold": (2, 12), "tags": ["orgânico"]},
+    {"nome": "Mendigo Ousado",   "xp": (2, 7),  "gold": (0, 5),  "tags": ["orgânico"]},
+]
+
+# ==============================
+# POOLS DE DROP (só itens ATIVOS)
+# ==============================
+DROP_POOL_FRACO = [
+    "pocao_vida",
+    "pocao_mana",
+    "anel_caveira_rato",
+]
+
+DROP_POOL_RARO = [
+    "katana",
+    "manto_negro_deus_cabra",
+    "anel_pristino",
+    "arco_longo_norte",
+    "manoplas_aco_polido",
+]
 # ==============================
 # NARRAÇÃO / COMBATE
 # ==============================
@@ -369,6 +404,37 @@ def mana_gain(classe: str, new_level: int) -> int:
 # ==============================
 # BANCO DE DADOS
 # ==============================
+
+async def pick_drop_from_pool(pool: List[str]) -> Optional[Dict[str, Any]]:
+    """
+    Retorna um item aleatório DO POOL, mas apenas se estiver ATIVO na loja.
+    Ajuste os nomes das tabelas/colunas se no seu DB forem diferentes.
+    """
+    if not pool:
+        return None
+
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Tenta algumas vezes para achar um item válido/ativo
+        for _ in range(12):
+            drop_id = random.choice(pool)
+
+            # ✅ AJUSTE AQUI se seu schema for diferente:
+            # - items(item_id, nome, ...)
+            # - shop_items(item_id, ativo)
+            cur = await db.execute("""
+                SELECT i.item_id, i.nome
+                FROM items i
+                JOIN shop_items s ON s.item_id = i.item_id
+                WHERE i.item_id = ? AND s.ativo = 1
+                LIMIT 1
+            """, (drop_id,))
+            row = await cur.fetchone()
+            if row:
+                return dict(row)
+
+    return None
 
 async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
@@ -1755,6 +1821,17 @@ async def cacar(interaction: discord.Interaction):
         p["xp"] += xp_gain
         p["gold"] += gold_gain
 
+            drop_txt = ""
+
+        # Raro = peso <= 4
+        eh_raro = int(m.get("peso", 99)) <= 4
+
+        if eh_raro and random.random() < DROP_RARO_CHANCE:
+            drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
+            if drop_item:
+                p.setdefault("inventario", []).append(drop_item["item_id"])
+                drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
+
     upou = await try_auto_level(p)
     await save_player(p)
 
@@ -1772,7 +1849,11 @@ async def cacar(interaction: discord.Interaction):
     )
 
     if ganhou:
-        embed.add_field(name="🏆 Vitória", value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold", inline=False)
+        embed.add_field(
+    name="🏆 Vitória",
+    value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold{drop_txt}",
+    inline=False
+)
     else:
         embed.add_field(name="⚠️ Resultado", value="O alvo resistiu / você falhou. Reorganize-se e tente novamente.", inline=False)
 
@@ -2508,6 +2589,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
