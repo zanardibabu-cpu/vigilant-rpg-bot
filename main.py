@@ -1730,6 +1730,10 @@ await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", e
 @tree.command(name="cacar", description="Caçar nas terras da Diretriz.")
 async def cacar(interaction: discord.Interaction):
 
+    # ------------------------
+    # Bloqueios iniciais
+    # ------------------------
+
     if await blocked_by_narration(interaction):
         return
 
@@ -1740,140 +1744,150 @@ async def cacar(interaction: discord.Interaction):
     if await blocked_by_rest(interaction, p):
         return
 
-    # resto do código aqui...
+    now = now_ts()
+    last = int(p.get("last_hunt_ts", 0))
 
-now = now_ts()
-last = int(p.get("last_hunt_ts", 0))
-if now - last < CACAR_COOLDOWN_S:
-    falta = CACAR_COOLDOWN_S - (now - last)
-    await interaction.response.send_message(f"⏳ Aguarde **{falta}s** para caçar novamente.", ephemeral=True)
-    return
+    if now - last < CACAR_COOLDOWN_S:
+        await interaction.response.send_message("⏳ Você precisa esperar para caçar novamente.", ephemeral=True)
+        return
 
-if int(p["stamina"]) < STAMINA_CUSTO_CACAR:
-    await interaction.response.send_message("🥵 Stamina insuficiente. Use **/descansar**.", ephemeral=True)
-    return
+    if int(p["stamina"]) < STAMINA_CUSTO_CACAR:
+        await interaction.response.send_message("🥵 Stamina insuficiente.", ephemeral=True)
+        return
 
-p["stamina"] -= STAMINA_CUSTO_CACAR
-p["last_hunt_ts"] = now
+    # desconta stamina
+    p["stamina"] -= STAMINA_CUSTO_CACAR
+    p["last_hunt_ts"] = now
 
-if random.random() < 0.18:
-    forca = random.choice([0, 1, 2])
+    # ------------------------
+    # 38% - Inimigo fraco
+    # ------------------------
+
+    if random.random() < INIMIGOS_FRACOS_CHANCE:
+
+        inimigo = random.choice(INIMIGOS_FRACOS)
+
+        xp_gain = random.randint(*inimigo["xp"])
+        gold_gain = random.randint(*inimigo["gold"])
+
+        drop_txt = ""
+
+        # 4% chance drop fraco
+        if random.random() < DROP_FRACO_CHANCE:
+            drop_item = await pick_drop_from_pool(DROP_POOL_FRACO)
+            if drop_item:
+                p.setdefault("inventario", []).append(drop_item["item_id"])
+                drop_txt = f"\n🎁 Drop: **{drop_item['nome']}**"
+
+        p["xp"] += xp_gain
+        p["gold"] += gold_gain
+
+        upou = await try_auto_level(p)
+        await save_player(p)
+
+        embed = discord.Embed(
+            title="⚔️ CAÇADA — VIGILLANT",
+            description=(
+                f"👹 Alvo: **{inimigo['nome']}**\n"
+                f"🎲 Abate fácil.\n\n"
+                f"❤ HP: **{p['hp']}** | 🥵 Stamina: **{p['stamina']}/{p['max_stamina']}**"
+            ),
+            color=discord.Color.orange()
+        )
+
+        embed.add_field(
+            name="🏆 Vitória",
+            value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold{drop_txt}",
+            inline=False
+        )
+
+        if upou:
+            embed.add_field(
+                name="🆙 LEVEL UP",
+                value=f"Você upou **{upou}** nível(is)!",
+                inline=False
+            )
+
+        await interaction.response.send_message(embed=embed)
+        return
+
+    # ------------------------
+    # Sorteio normal ponderado
+    # ------------------------
+
+    ids = list(MONSTROS.keys())
+    pesos = [MONSTROS[i]["peso"] for i in ids]
+    mob_id = random.choices(ids, weights=pesos, k=1)[0]
+    m = MONSTROS[mob_id]
+
+    d20 = rolar_d20()
+    dano = d20  # você pode adaptar para seu cálculo real
+
+    defesa = 0
+    dano_monstro = max(0, int(m["atk"]) - defesa)
+
+    mob_hp = int(m["hp"]) - dano
+    tomou = dano_monstro if mob_hp > 0 else 0
+    p["hp"] = max(0, int(p["hp"]) - tomou)
+
+    ganhou = (mob_hp <= 0 and dano > 0)
+
+    xp_gain = int(m["xp"])
+    gold_gain = int(m["gold"])
+
+    if dano == 0:
+        xp_gain //= 3
+        gold_gain //= 3
+
+    drop_txt = ""
+
+    if ganhou:
+        p["xp"] += xp_gain
+        p["gold"] += gold_gain
+
+        # raro = peso <= 4
+        if int(m.get("peso", 99)) <= 4 and random.random() < DROP_RARO_CHANCE:
+            drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
+            if drop_item:
+                p.setdefault("inventario", []).append(drop_item["item_id"])
+                drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
+
+    upou = await try_auto_level(p)
     await save_player(p)
+
     embed = discord.Embed(
-        title="💀 Emboscada!",
+        title="⚔️ CAÇADA — VIGILLANT",
         description=(
-            "Bandidos armados cercam você.\n\n"
-            "💰 **Pagar 100 gold** e eles vão embora.\n"
-            "⚔️ **Lutar** (D20).\n\n"
-            "_Vigillant observa em silêncio…_"
+            f"👹 Alvo: **{m['nome']}**\n"
+            f"🎲 D20: **{d20}**\n\n"
+            f"⚔️ Dano causado: **{dano}**\n"
+            f"💥 Dano recebido: **{tomou}**\n\n"
+            f"❤ HP: **{p['hp']}** | 🥵 Stamina: **{p['stamina']}/{p['max_stamina']}**"
         ),
-        color=discord.Color.red()
-    )
-    await interaction.response.send_message(embed=embed, view=BandidosView(interaction.user.id, forca), ephemeral=False)
-    return
-
-ids = list(MONSTROS.keys())
-pesos = [int(MONSTROS[k].get("peso", 1)) for k in ids]
-mob_id = random.choices(ids, weights=pesos, k=1)[0]
-m = MONSTROS[mob_id]
-
-tag = "orgânico"
-if "cibernético" in m["tags"]:
-    tag = "cibernético"
-if "demoníaco" in m["tags"]:
-    tag = "demoníaco"
-mob_line = random.choice(MOB_QUOTES[tag])
-
-d20 = rolar_d20()
-if d20 == 20:
-    mult = 2.0
-    rotulo = "💥 **CRÍTICO!**"
-elif d20 >= 14:
-    mult = 1.25
-    rotulo = "⚔️ **Acerto forte**"
-elif d20 >= 8:
-    mult = 1.0
-    rotulo = "✅ **Acerto**"
-else:
-    mult = 0.0
-    rotulo = "❌ **Errou**"
-
-classe = p["classe"]
-atk = await total_stat(p, "atk")
-mag = await total_stat(p, "magia")
-base = atk if classe in ["barbaro", "assassino", "arqueiro", "guerreiro"] else mag
-dano = int(max(0, base) * mult)
-
-    defesa = await total_stat(p, "defesa")
-dano_monstro = max(0, int(m["atk"]) - defesa)
-
-mob_hp = int(m["hp"]) - dano
-tomou = dano_monstro if mob_hp > 0 else 0
-p["hp"] = max(0, int(p["hp"]) - tomou)
-
-ganhou = (mob_hp <= 0 and dano > 0)
-
-xp_gain = int(m["xp"])
-gold_gain = int(m["gold"])
-
-if dano == 0:
-    xp_gain = max(0, xp_gain // 3)
-    gold_gain = max(0, gold_gain // 3)
-
-drop_txt = ""
-
-if ganhou:
-    p["xp"] += xp_gain
-    p["gold"] += gold_gain
-
-    eh_raro = int(m.get("peso", 99)) <= 4
-
-    if eh_raro and random.random() < DROP_RARO_CHANCE:
-        drop_item = await pick_drop_from_pool(DROP_POOL_RARO)
-        if drop_item:
-            p.setdefault("inventario", []).append(drop_item["item_id"])
-            drop_txt = f"\n🎁 Drop Raro: **{drop_item['nome']}**"
-
-upou = await try_auto_level(p)
-await save_player(p)
-
-embed = discord.Embed(
-    title="⚔️ CAÇADA — VIGILLANT",
-    description=(
-        f"_{mob_line}_\n\n"
-        f"👹 Alvo: **{m['nome']}**\n"
-        f"🎲 D20: **{d20}**  →  {rotulo}\n\n"
-        f"⚔️ Dano causado: **{dano}**\n"
-        f"💥 Dano recebido: **{tomou}**\n\n"
-        f"❤ HP: **{p['hp']}**  |  🥵 Stamina: **{p['stamina']}/{p['max_stamina']}**"
-    ),
-    color=discord.Color.orange()
-)
-
-if ganhou:
-    embed.add_field(
-        name="🏆 Vitória",
-        value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold{drop_txt}",
-        inline=False
-    )
-else:
-    embed.add_field(
-        name="⚠️ Resultado",
-        value="O alvo resistiu / você falhou. Reorganize-se e tente novamente.",
-        inline=False
+        color=discord.Color.orange()
     )
 
-if upou:
-    embed.add_field(
-        name="🆙 LEVEL UP",
-        value=f"Você upou **{upou}** nível(is)! (+{upou*3} pontos livres + auto por classe)",
-        inline=False
-    )
+    if ganhou:
+        embed.add_field(
+            name="🏆 Vitória",
+            value=f"✨ +{xp_gain} XP | 💰 +{gold_gain} Gold{drop_txt}",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="⚠️ Resultado",
+            value="O alvo resistiu / você falhou. Reorganize-se e tente novamente.",
+            inline=False
+        )
 
-if random.random() < 0.25:
-    embed.set_footer(text=f"Vigillant: “{random.choice(VIGILLANT_QUOTES)}”")
+    if upou:
+        embed.add_field(
+            name="🆙 LEVEL UP",
+            value=f"Você upou **{upou}** nível(is)!",
+            inline=False
+        )
 
-await interaction.response.send_message(embed=embed, ephemeral=False)
+    await interaction.response.send_message(embed=embed)
 
 # ==============================
 # COMANDOS — MESTRE
@@ -2599,6 +2613,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
