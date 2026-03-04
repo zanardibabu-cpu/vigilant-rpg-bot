@@ -171,7 +171,7 @@ NARRACAO_GUILD: Dict[int, bool] = {}
 INITIAL_ITEMS = {
     "pocao_vida": {
         "nome": "Poção de Vida",
-        "preco": 20,
+        "preco": 200,
         "tipo": "consumivel",
         "slot": "consumivel",
         "efeito": {"hp": 20},
@@ -181,7 +181,7 @@ INITIAL_ITEMS = {
     },
     "pocao_mana": {
         "nome": "Poção de Mana",
-        "preco": 20,
+        "preco": 200,
         "tipo": "consumivel",
         "slot": "consumivel",
         "efeito": {"mana": 20},
@@ -191,7 +191,7 @@ INITIAL_ITEMS = {
     },
     "tablet_hacker": {
         "nome": "Tablet Terminal Hacker",
-        "preco": 1200,
+        "preco": 1900,
         "tipo": "especial",
         "slot": "especial",
         "efeito": {"hack_stun_turns": 2},
@@ -199,6 +199,94 @@ INITIAL_ITEMS = {
         "classes": ["mago", "clerigo"],
         "desc": "Narrativa: hack desativa cibernéticos por 2 turnos."
     },
+"anel_do_vigor": {
+    "nome": "Anel do Vigor",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 520,
+    "bonus": {"atk": 1},
+    "desc": "Um anel simples que fortalece o corpo do portador."
+},
+
+"anel_da_guarda": {
+    "nome": "Anel da Guarda",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 560,
+    "bonus": {"defesa": 1},
+    "desc": "Gravado com runas antigas de proteção."
+},
+
+"anel_da_sabedoria": {
+    "nome": "Anel da Sabedoria",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 620,
+    "bonus": {"magia": 1},
+    "desc": "Um cristal antigo amplifica o poder arcano."
+},
+
+"anel_da_sombra": {
+    "nome": "Anel da Sombra",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 580,
+    "bonus": {"furtividade": 1},
+    "desc": "Usado por ladrões e exploradores das ruínas."
+},
+
+"anel_da_agilidade": {
+    "nome": "Anel da Agilidade",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 580,
+    "bonus": {"destreza": 1},
+    "desc": "Leve como o vento, acelera os reflexos."
+},
+
+"anel_da_sorte_antiga": {
+    "nome": "Anel da Sorte Antiga",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 650,
+    "bonus": {"sorte": 1},
+    "desc": "Relíquia de um cassino pré-guerra."
+},
+
+"anel_de_aco_negro": {
+    "nome": "Anel de Aço Negro",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 1050,
+    "bonus": {"defesa": 2},
+    "desc": "Forjado nas fornalhas de um ferreiro antigo."
+},
+
+"anel_arcano": {
+    "nome": "Anel Arcano",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 1200,
+    "bonus": {"magia": 2},
+    "desc": "Amplifica feitiços de magos experientes."
+},
+
+"anel_do_cacador": {
+    "nome": "Anel do Caçador",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 1150,
+    "bonus": {"atk": 2},
+    "desc": "Preferido pelos caçadores das zonas irradiadas."
+},
+
+"anel_da_luz_sagrada": {
+    "nome": "Anel da Luz Sagrada",
+    "tipo": "anel",
+    "slot": "anel",
+    "preco": 1350,
+    "bonus": {"magia": 2},
+    "desc": "Relíquia usada por clérigos nas antigas catedrais."
 }
 
 INITIAL_SHOP_ACTIVE = [
@@ -2685,6 +2773,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
