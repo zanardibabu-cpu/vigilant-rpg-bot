@@ -120,145 +120,6 @@ class ShopView(discord.ui.View):
         await interaction.response.edit_message(content="✅ Loja fechada.", embed=None, view=None)
 
 
-@tree.command(name="loja", description="Ver itens ativos de uma loja (paginado).")
-@only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja")
-async def loja_cmd(interaction: discord.Interaction, loja: str = "mercador"):
-    p = await require_player(interaction)
-    if not p:
-        return
-    if await blocked_by_rest(interaction, p):
-        return
-
-    loja = (loja or "mercador").lower().strip()
-    if loja not in LOJAS_VALIDAS:
-        loja = "mercador"
-
-    itens = await items_list_active(loja)
-    await interaction.response.send_message(
-        embed=build_shop_embed(loja, 0, itens),
-        view=ShopView(interaction.user.id, loja, itens, 0),
-        ephemeral=True
-    )
-def parse_json_field(txt: str) -> Dict[str, Any]:
-    txt = (txt or "").strip()
-    if not txt:
-        return {}
-    try:
-        obj = json.loads(txt)
-        if isinstance(obj, dict):
-            return obj
-        return {}
-    except Exception:
-        return {}
-
-def parse_json_list(txt: str) -> List[str]:
-    txt = (txt or "").strip()
-    if not txt:
-        return []
-    try:
-        obj = json.loads(txt)
-        if isinstance(obj, list):
-            return [str(x) for x in obj]
-        return []
-    except Exception:
-        return []
-
-@tree.command(name="item_criar", description="(Mestre) Criar/atualizar item e escolher a loja.")
-@only_master_channel()
-@app_commands.describe(
-    item_id="id unico ex: anel_fogo",
-    nome="nome exibido",
-    tipo="ex: anel/arma/armadura/cajado/livro/reliquia/consumivel",
-    slot="ex: anel/arma/armadura/cajado/especial/consumivel",
-    preco="preço em gold",
-    loja="mercador|ferreiro|alfaiate|arcano|igreja",
-    bonus_json='JSON dict ex: {"magia":2,"defesa":1}',
-    efeito_json='JSON dict ex: {"cura_bonus":2}',
-    classes_json='JSON list ex: ["mago","clerigo"]',
-    desc="descrição"
-)
-async def item_criar(
-    interaction: discord.Interaction,
-    item_id: str,
-    nome: str,
-    tipo: str,
-    slot: str,
-    preco: int,
-    loja: str,
-    bonus_json: str = "",
-    efeito_json: str = "",
-    classes_json: str = "",
-    desc: str = ""
-):
-    item_id = item_id.lower().strip()
-    loja = (loja or "mercador").lower().strip()
-    if loja not in LOJAS_VALIDAS:
-        await interaction.response.send_message("❌ Loja inválida.", ephemeral=True)
-        return
-
-    it = {
-        "nome": nome,
-        "tipo": tipo,
-        "slot": slot,
-        "preco": int(preco),
-        "bonus": parse_json_field(bonus_json),
-        "efeito": parse_json_field(efeito_json),
-        "classes": parse_json_list(classes_json),
-        "desc": desc,
-        "loja": loja
-    }
-    await item_upsert(item_id, it)
-    await interaction.response.send_message(f"✅ Item `{item_id}` criado/atualizado na loja **{loja}**.", ephemeral=True)
-
-@tree.command(name="item_ativar", description="(Mestre) Ativar item na vitrine da loja.")
-@only_master_channel()
-async def item_ativar(interaction: discord.Interaction, item_id: str):
-    item_id = item_id.lower().strip()
-    it = await item_get(item_id)
-    if not it or int(it.get("deleted", 0)) == 1:
-        await interaction.response.send_message("❌ Item não existe (ou foi removido).", ephemeral=True)
-        return
-    await item_set_active(item_id, True)
-    await interaction.response.send_message(f"✅ Item `{item_id}` ativado na loja **{it['loja']}**.", ephemeral=True)
-
-@tree.command(name="item_desativar", description="(Mestre) Desativar item da vitrine.")
-@only_master_channel()
-async def item_desativar(interaction: discord.Interaction, item_id: str):
-    item_id = item_id.lower().strip()
-    it = await item_get(item_id)
-    if not it:
-        await interaction.response.send_message("❌ Item não existe.", ephemeral=True)
-        return
-    await item_set_active(item_id, False)
-    await interaction.response.send_message(f"✅ Item `{item_id}` desativado.", ephemeral=True)
-
-@tree.command(name="item_mover", description="(Mestre) Mover item para outra loja.")
-@only_master_channel()
-@app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja")
-async def item_mover(interaction: discord.Interaction, item_id: str, loja: str):
-    item_id = item_id.lower().strip()
-    loja = (loja or "").lower().strip()
-    if loja not in LOJAS_VALIDAS:
-        await interaction.response.send_message("❌ Loja inválida.", ephemeral=True)
-        return
-    it = await item_get(item_id)
-    if not it or int(it.get("deleted", 0)) == 1:
-        await interaction.response.send_message("❌ Item não existe (ou foi removido).", ephemeral=True)
-        return
-
-    it["loja"] = loja
-    await item_upsert(item_id, it)
-    await interaction.response.send_message(f"✅ Item `{item_id}` movido para **{loja}**.", ephemeral=True)
-
-@tree.command(name="item_excluir", description="(Mestre) Excluir item do mundo (some até se equipado).")
-@only_master_channel()
-async def item_excluir(interaction: discord.Interaction, item_id: str):
-    item_id = item_id.lower().strip()
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("UPDATE items SET deleted=1, ativo=0 WHERE item_id=?", (item_id,))
-        await db.commit()
-    await interaction.response.send_message(f"🗑️ Item `{item_id}` removido do mundo (deleted=1).", ephemeral=True)
 # Livro de magias
 SPELLBOOK_SLOTS = 7
 
@@ -981,7 +842,7 @@ async def pick_drop_from_pool(pool: List[str]) -> Optional[Dict[str, Any]]:
 
 async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
-        # players
+        # items catalog
         await db.execute("""
         CREATE TABLE IF NOT EXISTS items (
             item_id TEXT PRIMARY KEY,
@@ -1001,6 +862,49 @@ async def init_db():
 
         await db.execute("CREATE INDEX IF NOT EXISTS idx_items_loja_ativo ON items(loja, ativo, deleted)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_items_tipo ON items(tipo, deleted)")
+
+        # shop
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS shop_items (
+            item_id TEXT PRIMARY KEY,
+            preco INTEGER,
+            estoque INTEGER,
+            ativo INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY(item_id) REFERENCES items(item_id)
+        )
+        """)
+
+        # master chest
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS master_chest (
+            item_id TEXT PRIMARY KEY,
+            qtd INTEGER NOT NULL,
+            FOREIGN KEY(item_id) REFERENCES items(item_id)
+        )
+        """)
+
+        # spells catalog
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS spells (
+            spell_id TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            custo_mana INTEGER NOT NULL,
+            preco INTEGER NOT NULL,
+            escola TEXT NOT NULL,              -- "arcano" ou "igreja"
+            efeito_tipo TEXT NOT NULL,         -- "dano", "cura", "buff", "util"
+            efeito_valor INTEGER NOT NULL,     -- número (ex: 12)
+            tags_json TEXT NOT NULL,           -- ["cibernetico","radiação"...]
+            classes_json TEXT NOT NULL,        -- ["mago"] etc
+            desc TEXT NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 0,
+            deleted INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
+
+        await db.commit()
 
 # ==============================
 # LOJAS / CATÁLOGO (DB driven)
@@ -1302,77 +1206,6 @@ async def seed_initial_items():
     # ativa os iniciais (sem desativar os seus customizados)
     for iid in INITIAL_ACTIVE_IDS:
         await item_set_active(iid, True)
-        # items catalog
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS items (
-            item_id TEXT PRIMARY KEY,
-            nome TEXT NOT NULL,
-            preco_base INTEGER NOT NULL,
-            tipo TEXT NOT NULL,
-            slot TEXT NOT NULL,
-            bonus_json TEXT,
-            efeito_json TEXT,
-            classes_json TEXT,
-            desc TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0
-        )
-        """)
-
-        # shop
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS shop_items (
-            item_id TEXT PRIMARY KEY,
-            preco INTEGER,
-            estoque INTEGER,
-            ativo INTEGER NOT NULL DEFAULT 1,
-            FOREIGN KEY(item_id) REFERENCES items(item_id)
-        )
-        """)
-
-        # master chest
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS master_chest (
-            item_id TEXT PRIMARY KEY,
-            qtd INTEGER NOT NULL,
-            FOREIGN KEY(item_id) REFERENCES items(item_id)
-        )
-        """)
-
-        # spells catalog
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS spells (
-            spell_id TEXT PRIMARY KEY,
-            nome TEXT NOT NULL,
-            custo INTEGER NOT NULL,
-            classes_json TEXT NOT NULL,
-            efeito_tipo TEXT NOT NULL,   -- "dano" | "cura"
-            efeito_valor INTEGER NOT NULL,
-            desc TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0
-        )
-        """)
-
-    await db.execute("""
-        CREATE TABLE IF NOT EXISTS spells (
-            spell_id TEXT PRIMARY KEY,
-            nome TEXT NOT NULL,
-            custo_mana INTEGER NOT NULL,
-            preco INTEGER NOT NULL,
-            escola TEXT NOT NULL,              -- "arcano" ou "igreja"
-            efeito_tipo TEXT NOT NULL,         -- "dano", "cura", "buff", "util"
-            efeito_valor INTEGER NOT NULL,     -- número (ex: 12)
-            tags_json TEXT NOT NULL,           -- ["cibernetico","radiação"...]
-            classes_json TEXT NOT NULL,        -- ["mago"] etc
-            desc TEXT NOT NULL,
-            ativo INTEGER NOT NULL DEFAULT 0,
-            deleted INTEGER NOT NULL DEFAULT 0
-        )
-        """)
-
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
-
-        await db.commit()
 
 async def seed_initial_data():
     """
