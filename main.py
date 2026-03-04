@@ -287,7 +287,7 @@ INITIAL_ITEMS = {
         "preco": 1350,
         "bonus": {"magia": 2},
         "desc": "Relíquia usada por clérigos nas antigas catedrais."
-}
+},
 
 INITIAL_SHOP_ACTIVE = [
     ("pocao_vida", None, None),
@@ -2773,6 +2773,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
