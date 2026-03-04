@@ -981,7 +981,7 @@ async def pick_drop_from_pool(pool: List[str]) -> Optional[Dict[str, Any]]:
 
 async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
-        # players
+        # items catalog
         await db.execute("""
         CREATE TABLE IF NOT EXISTS items (
             item_id TEXT PRIMARY KEY,
@@ -1001,6 +1001,49 @@ async def init_db():
 
         await db.execute("CREATE INDEX IF NOT EXISTS idx_items_loja_ativo ON items(loja, ativo, deleted)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_items_tipo ON items(tipo, deleted)")
+
+        # shop
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS shop_items (
+            item_id TEXT PRIMARY KEY,
+            preco INTEGER,
+            estoque INTEGER,
+            ativo INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY(item_id) REFERENCES items(item_id)
+        )
+        """)
+
+        # master chest
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS master_chest (
+            item_id TEXT PRIMARY KEY,
+            qtd INTEGER NOT NULL,
+            FOREIGN KEY(item_id) REFERENCES items(item_id)
+        )
+        """)
+
+        # spells catalog
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS spells (
+            spell_id TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            custo_mana INTEGER NOT NULL,
+            preco INTEGER NOT NULL,
+            escola TEXT NOT NULL,              -- "arcano" ou "igreja"
+            efeito_tipo TEXT NOT NULL,         -- "dano", "cura", "buff", "util"
+            efeito_valor INTEGER NOT NULL,     -- número (ex: 12)
+            tags_json TEXT NOT NULL,           -- ["cibernetico","radiação"...]
+            classes_json TEXT NOT NULL,        -- ["mago"] etc
+            desc TEXT NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 0,
+            deleted INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
+
+        await db.commit()
 
 # ==============================
 # LOJAS / CATÁLOGO (DB driven)
@@ -1302,77 +1345,6 @@ async def seed_initial_items():
     # ativa os iniciais (sem desativar os seus customizados)
     for iid in INITIAL_ACTIVE_IDS:
         await item_set_active(iid, True)
-        # items catalog
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS items (
-            item_id TEXT PRIMARY KEY,
-            nome TEXT NOT NULL,
-            preco_base INTEGER NOT NULL,
-            tipo TEXT NOT NULL,
-            slot TEXT NOT NULL,
-            bonus_json TEXT,
-            efeito_json TEXT,
-            classes_json TEXT,
-            desc TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0
-        )
-        """)
-
-        # shop
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS shop_items (
-            item_id TEXT PRIMARY KEY,
-            preco INTEGER,
-            estoque INTEGER,
-            ativo INTEGER NOT NULL DEFAULT 1,
-            FOREIGN KEY(item_id) REFERENCES items(item_id)
-        )
-        """)
-
-        # master chest
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS master_chest (
-            item_id TEXT PRIMARY KEY,
-            qtd INTEGER NOT NULL,
-            FOREIGN KEY(item_id) REFERENCES items(item_id)
-        )
-        """)
-
-        # spells catalog
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS spells (
-            spell_id TEXT PRIMARY KEY,
-            nome TEXT NOT NULL,
-            custo INTEGER NOT NULL,
-            classes_json TEXT NOT NULL,
-            efeito_tipo TEXT NOT NULL,   -- "dano" | "cura"
-            efeito_valor INTEGER NOT NULL,
-            desc TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0
-        )
-        """)
-
-    await db.execute("""
-        CREATE TABLE IF NOT EXISTS spells (
-            spell_id TEXT PRIMARY KEY,
-            nome TEXT NOT NULL,
-            custo_mana INTEGER NOT NULL,
-            preco INTEGER NOT NULL,
-            escola TEXT NOT NULL,              -- "arcano" ou "igreja"
-            efeito_tipo TEXT NOT NULL,         -- "dano", "cura", "buff", "util"
-            efeito_valor INTEGER NOT NULL,     -- número (ex: 12)
-            tags_json TEXT NOT NULL,           -- ["cibernetico","radiação"...]
-            classes_json TEXT NOT NULL,        -- ["mago"] etc
-            desc TEXT NOT NULL,
-            ativo INTEGER NOT NULL DEFAULT 0,
-            deleted INTEGER NOT NULL DEFAULT 0
-        )
-        """)
-
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
-
-        await db.commit()
 
 async def seed_initial_data():
     """
