@@ -1045,7 +1045,7 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
 
-await db.commit()
+        await db.commit()
 
 # ==============================
 # LOJAS / CATÁLOGO (DB driven)
