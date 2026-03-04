@@ -1352,7 +1352,7 @@ async def seed_initial_items():
         )
         """)
 
-                await db.execute("""
+    await db.execute("""
         CREATE TABLE IF NOT EXISTS spells (
             spell_id TEXT PRIMARY KEY,
             nome TEXT NOT NULL,
@@ -3748,6 +3748,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
