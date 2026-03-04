@@ -199,6 +199,7 @@ INITIAL_ITEMS = {
         "classes": ["mago", "clerigo"],
         "desc": "Narrativa: hack desativa cibernéticos por 2 turnos."
     },
+
     "anel_do_vigor": {
         "nome": "Anel do Vigor",
         "tipo": "anel",
@@ -206,7 +207,7 @@ INITIAL_ITEMS = {
         "preco": 520,
         "bonus": {"atk": 1},
         "desc": "Um anel simples que fortalece o corpo do portador."
-},
+    },
 
     "anel_da_guarda": {
         "nome": "Anel da Guarda",
@@ -215,7 +216,7 @@ INITIAL_ITEMS = {
         "preco": 560,
         "bonus": {"defesa": 1},
         "desc": "Gravado com runas antigas de proteção."
-},
+    },
 
     "anel_da_sabedoria": {
         "nome": "Anel da Sabedoria",
@@ -224,7 +225,7 @@ INITIAL_ITEMS = {
         "preco": 620,
         "bonus": {"magia": 1},
         "desc": "Um cristal antigo amplifica o poder arcano."
-},
+    },
 
     "anel_da_sombra": {
         "nome": "Anel da Sombra",
@@ -233,7 +234,7 @@ INITIAL_ITEMS = {
         "preco": 580,
         "bonus": {"furtividade": 1},
         "desc": "Usado por ladrões e exploradores das ruínas."
-},
+    },
 
     "anel_da_agilidade": {
         "nome": "Anel da Agilidade",
@@ -242,7 +243,7 @@ INITIAL_ITEMS = {
         "preco": 580,
         "bonus": {"destreza": 1},
         "desc": "Leve como o vento, acelera os reflexos."
-},
+    },
 
     "anel_da_sorte_antiga": {
         "nome": "Anel da Sorte Antiga",
@@ -251,7 +252,7 @@ INITIAL_ITEMS = {
         "preco": 650,
         "bonus": {"sorte": 1},
         "desc": "Relíquia de um cassino pré-guerra."
-},
+    },
 
     "anel_de_aco_negro": {
         "nome": "Anel de Aço Negro",
@@ -260,7 +261,7 @@ INITIAL_ITEMS = {
         "preco": 1050,
         "bonus": {"defesa": 2},
         "desc": "Forjado nas fornalhas de um ferreiro antigo."
-},
+    },
 
     "anel_arcano": {
         "nome": "Anel Arcano",
@@ -269,7 +270,7 @@ INITIAL_ITEMS = {
         "preco": 1200,
         "bonus": {"magia": 2},
         "desc": "Amplifica feitiços de magos experientes."
-},
+    },
 
     "anel_do_cacador": {
         "nome": "Anel do Caçador",
@@ -278,7 +279,7 @@ INITIAL_ITEMS = {
         "preco": 1150,
         "bonus": {"atk": 2},
         "desc": "Preferido pelos caçadores das zonas irradiadas."
-},
+    },
 
     "anel_da_luz_sagrada": {
         "nome": "Anel da Luz Sagrada",
@@ -287,7 +288,8 @@ INITIAL_ITEMS = {
         "preco": 1350,
         "bonus": {"magia": 2},
         "desc": "Relíquia usada por clérigos nas antigas catedrais."
-},
+    },
+}
 
 INITIAL_SHOP_ACTIVE = [
     ("pocao_vida", None, None),
@@ -2773,6 +2775,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
