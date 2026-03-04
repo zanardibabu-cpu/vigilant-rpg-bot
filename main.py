@@ -301,6 +301,12 @@ INITIAL_SHOP_ACTIVE = [
 # UTIL / CHECKS
 # ==============================
 
+def normalize_item_list(raw: str) -> List[str]:
+    if not raw:
+        return []
+    parts = [p.strip().lower() for p in raw.split(",")]
+    return [p for p in parts if p]
+
 def now_ts() -> int:
     return int(time.time())
 
@@ -2775,6 +2781,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
