@@ -1,3 +1,5 @@
+print("BOOT VERSION: 2026-03-04-01")
+
 import os
 import time
 import json
