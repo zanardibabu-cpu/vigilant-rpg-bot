@@ -9,6 +9,16 @@ import aiosqlite
 import discord
 from discord import app_commands
 from typing import Optional, List, Dict, Any, Tuple
+
+# ==========================
+# DISCORD CLIENT / TREE
+# ==========================
+intents = discord.Intents.default()
+intents.members = True
+
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
+
 # ==========================
 # CONFIG / IDs
 # ==========================
