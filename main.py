@@ -2043,7 +2043,104 @@ async def list_all_player_ids() -> List[int]:
         cur = await db.execute("SELECT user_id FROM players")
         rows = await cur.fetchall()
         return [int(r[0]) for r in rows]
+@tree.command(name="spawn", description="(Mestre) Criar/Recriar personagem sem /start (classe, nível, stats e itens).")
+@only_master_channel()
+@app_commands.describe(
+    membro="Jogador",
+    classe="clerigo | barbaro | arqueiro | mago | assassino | guerreiro",
+    nivel="Nível",
+    gold="Gold",
+    xp="XP",
+    atk="ATK (opcional)",
+    defesa="DEFESA (opcional)",
+    magia="MAGIA (opcional)",
+    sorte="SORTE (opcional)",
+    furtividade="FURTIVIDADE (opcional)",
+    destreza="DESTREZA (opcional)",
+    itens="Inventário CSV (ex: pocao_vida, anel_arcano)",
+    sobrescrever="sim para apagar e recriar do zero"
+)
+async def spawn(
+    interaction: discord.Interaction,
+    membro: discord.Member,
+    classe: str,
+    nivel: int = 1,
+    gold: int = 100,
+    xp: int = 0,
+    atk: Optional[int] = None,
+    defesa: Optional[int] = None,
+    magia: Optional[int] = None,
+    sorte: Optional[int] = None,
+    furtividade: Optional[int] = None,
+    destreza: Optional[int] = None,
+    itens: str = "",
+    sobrescrever: str = "nao",
+):
+    classe = (classe or "").lower().strip()
+    if classe not in CLASSES:
+        await interaction.response.send_message(f"❌ Classe inválida. Use: {', '.join(CLASSES.keys())}", ephemeral=True)
+        return
 
+    # sobrescrever?
+    do_reset = (sobrescrever or "nao").lower().strip() in ["sim", "s", "yes", "y", "true", "1"]
+    if do_reset:
+        async with aiosqlite.connect(DB_FILE) as db:
+            await db.execute("DELETE FROM players WHERE user_id=?", (membro.id,))
+            await db.commit()
+
+    # existe?
+    p = await get_player(membro.id)
+    if not p:
+        p = build_new_player(membro.id, classe)
+
+    # aplica classe e base
+    p["classe"] = classe
+    base_stats = CLASSES[classe].copy()
+
+    # overrides se vierem
+    if atk is not None: base_stats["atk"] = int(atk)
+    if defesa is not None: base_stats["defesa"] = int(defesa)
+    if magia is not None: base_stats["magia"] = int(magia)
+    if sorte is not None: base_stats["sorte"] = int(sorte)
+    if furtividade is not None: base_stats["furtividade"] = int(furtividade)
+    if destreza is not None: base_stats["destreza"] = int(destreza)
+
+    p["stats"] = base_stats
+
+    # set nível/xp/gold
+    p["level"] = max(1, int(nivel))
+    p["xp"] = max(0, int(xp))
+    p["gold"] = max(0, int(gold))
+
+    # hp/mana mínimos (não deixa zerar)
+    p["hp"] = max(int(p.get("hp", 1)), int(p["stats"].get("hp_base", 1)))
+    p["mana"] = max(int(p.get("mana", 0)), int(p["stats"].get("mana_base", 0)))
+
+    # inventário
+    if itens:
+        inv_add = [x.strip().lower() for x in itens.split(",") if x.strip()]
+        p.setdefault("inventario", [])
+        added = 0
+        for item_id in inv_add:
+            if item_id in LOJA:
+                p["inventario"].append(item_id)
+                added += 1
+    else:
+        added = 0
+
+    # equipado normalizado
+    p.setdefault("equipado", {})
+    p["equipado"] = ensure_equipado_format(p["equipado"])
+
+    await save_player(p)
+
+    await interaction.response.send_message(
+        "✅ **Spawn concluído**\n"
+        f"Jogador: {membro.mention}\n"
+        f"Classe: **{classe}** | Nível: **{p['level']}** | XP: **{p['xp']}** | Gold: **{p['gold']}**\n"
+        f"Itens adicionados: **{added}**",
+        ephemeral=False
+    )
 
 @tree.command(name="darxp", description="(Mestre) Dar XP (jogador | all | todos_exceto).")
 @only_master_channel()
@@ -2781,6 +2878,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
