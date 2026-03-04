@@ -42,6 +42,223 @@ XP_MULT = 1.20  # +20% por nível
 # Loja UI
 ITEMS_PER_PAGE = 6
 
+def build_shop_embed(loja: str, page: int, itens: List[Dict[str, Any]]) -> discord.Embed:
+    total = len(itens)
+    total_pages = max(1, (total + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+
+    start = page * ITEMS_PER_PAGE
+    end = start + ITEMS_PER_PAGE
+    chunk = itens[start:end]
+
+    titulos = {
+        "mercador": "🏪 Terminal de Suprimentos — MERCADOR",
+        "ferreiro": "⚒️ Forja dos Ermos — FERREIRO",
+        "alfaiate": "🧵 Atelier das Ruínas — ALFAIATE",
+        "arcano": "🔮 Escola Arcana — ARCANOS",
+        "igreja": "⛪ Santuário — IGREJA",
+    }
+
+    embed = discord.Embed(
+        title=f"{titulos.get(loja, loja.upper())} (itens ativos)",
+        description=(
+            "Use **/comprar item_id** para comprar.\n"
+            "Use **/vender item_id** para vender (**60%**).\n"
+            "Use **/equipar** e **/desequipar**.\n"
+        ),
+        color=discord.Color.green()
+    )
+
+    for it in chunk:
+        item_id = it["item_id"]
+        preco = int(it.get("preco", 0))
+        tipo = it.get("tipo", "—")
+        desc = (it.get("desc", "") or "").strip()
+
+        if tipo == "consumivel":
+            eff = it.get("efeito", {})
+            eff_txt = ", ".join([f"{k}+{v}" for k, v in eff.items()]) if eff else "—"
+            val = f"💰 **{preco}** | 🧪 {eff_txt}"
+        else:
+            bonus = it.get("bonus", {})
+            btxt = ", ".join([f"{k.upper()}+{v}" for k, v in bonus.items()]) if bonus else "—"
+            val = f"💰 **{preco}** | ⚙️ **{tipo}** | {btxt}"
+
+        if desc:
+            desc = desc[:90] + ("…" if len(desc) > 90 else "")
+            val += f"\n_{desc}_"
+
+        embed.add_field(name=f"**{it.get('nome','Item')}** (`{item_id}`)", value=val, inline=False)
+
+    embed.set_footer(text=f"Loja: {loja} • Página {page+1}/{total_pages} • Itens {start+1}-{min(end,total)} de {total}")
+    return embed
+
+
+class ShopView(discord.ui.View):
+    def __init__(self, user_id: int, loja: str, itens: List[Dict[str, Any]], page: int = 0):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.loja = loja
+        self.itens = itens
+        self.page = page
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.user_id
+
+    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary)
+    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page -= 1
+        await interaction.response.edit_message(embed=build_shop_embed(self.loja, self.page, self.itens), view=self)
+
+    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page += 1
+        await interaction.response.edit_message(embed=build_shop_embed(self.loja, self.page, self.itens), view=self)
+
+    @discord.ui.button(label="Fechar", style=discord.ButtonStyle.danger)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="✅ Loja fechada.", embed=None, view=None)
+
+
+@tree.command(name="loja", description="Ver itens ativos de uma loja (paginado).")
+@only_channel(CANAL_LOJA_ID, "loja")
+@app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja")
+async def loja_cmd(interaction: discord.Interaction, loja: str = "mercador"):
+    p = await require_player(interaction)
+    if not p:
+        return
+    if await blocked_by_rest(interaction, p):
+        return
+
+    loja = (loja or "mercador").lower().strip()
+    if loja not in LOJAS_VALIDAS:
+        loja = "mercador"
+
+    itens = await items_list_active(loja)
+    await interaction.response.send_message(
+        embed=build_shop_embed(loja, 0, itens),
+        view=ShopView(interaction.user.id, loja, itens, 0),
+        ephemeral=True
+    )
+def parse_json_field(txt: str) -> Dict[str, Any]:
+    txt = (txt or "").strip()
+    if not txt:
+        return {}
+    try:
+        obj = json.loads(txt)
+        if isinstance(obj, dict):
+            return obj
+        return {}
+    except Exception:
+        return {}
+
+def parse_json_list(txt: str) -> List[str]:
+    txt = (txt or "").strip()
+    if not txt:
+        return []
+    try:
+        obj = json.loads(txt)
+        if isinstance(obj, list):
+            return [str(x) for x in obj]
+        return []
+    except Exception:
+        return []
+
+@tree.command(name="item_criar", description="(Mestre) Criar/atualizar item e escolher a loja.")
+@only_master_channel()
+@app_commands.describe(
+    item_id="id unico ex: anel_fogo",
+    nome="nome exibido",
+    tipo="ex: anel/arma/armadura/cajado/livro/reliquia/consumivel",
+    slot="ex: anel/arma/armadura/cajado/especial/consumivel",
+    preco="preço em gold",
+    loja="mercador|ferreiro|alfaiate|arcano|igreja",
+    bonus_json='JSON dict ex: {"magia":2,"defesa":1}',
+    efeito_json='JSON dict ex: {"cura_bonus":2}',
+    classes_json='JSON list ex: ["mago","clerigo"]',
+    desc="descrição"
+)
+async def item_criar(
+    interaction: discord.Interaction,
+    item_id: str,
+    nome: str,
+    tipo: str,
+    slot: str,
+    preco: int,
+    loja: str,
+    bonus_json: str = "",
+    efeito_json: str = "",
+    classes_json: str = "",
+    desc: str = ""
+):
+    item_id = item_id.lower().strip()
+    loja = (loja or "mercador").lower().strip()
+    if loja not in LOJAS_VALIDAS:
+        await interaction.response.send_message("❌ Loja inválida.", ephemeral=True)
+        return
+
+    it = {
+        "nome": nome,
+        "tipo": tipo,
+        "slot": slot,
+        "preco": int(preco),
+        "bonus": parse_json_field(bonus_json),
+        "efeito": parse_json_field(efeito_json),
+        "classes": parse_json_list(classes_json),
+        "desc": desc,
+        "loja": loja
+    }
+    await item_upsert(item_id, it)
+    await interaction.response.send_message(f"✅ Item `{item_id}` criado/atualizado na loja **{loja}**.", ephemeral=True)
+
+@tree.command(name="item_ativar", description="(Mestre) Ativar item na vitrine da loja.")
+@only_master_channel()
+async def item_ativar(interaction: discord.Interaction, item_id: str):
+    item_id = item_id.lower().strip()
+    it = await item_get(item_id)
+    if not it or int(it.get("deleted", 0)) == 1:
+        await interaction.response.send_message("❌ Item não existe (ou foi removido).", ephemeral=True)
+        return
+    await item_set_active(item_id, True)
+    await interaction.response.send_message(f"✅ Item `{item_id}` ativado na loja **{it['loja']}**.", ephemeral=True)
+
+@tree.command(name="item_desativar", description="(Mestre) Desativar item da vitrine.")
+@only_master_channel()
+async def item_desativar(interaction: discord.Interaction, item_id: str):
+    item_id = item_id.lower().strip()
+    it = await item_get(item_id)
+    if not it:
+        await interaction.response.send_message("❌ Item não existe.", ephemeral=True)
+        return
+    await item_set_active(item_id, False)
+    await interaction.response.send_message(f"✅ Item `{item_id}` desativado.", ephemeral=True)
+
+@tree.command(name="item_mover", description="(Mestre) Mover item para outra loja.")
+@only_master_channel()
+@app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja")
+async def item_mover(interaction: discord.Interaction, item_id: str, loja: str):
+    item_id = item_id.lower().strip()
+    loja = (loja or "").lower().strip()
+    if loja not in LOJAS_VALIDAS:
+        await interaction.response.send_message("❌ Loja inválida.", ephemeral=True)
+        return
+    it = await item_get(item_id)
+    if not it or int(it.get("deleted", 0)) == 1:
+        await interaction.response.send_message("❌ Item não existe (ou foi removido).", ephemeral=True)
+        return
+
+    it["loja"] = loja
+    await item_upsert(item_id, it)
+    await interaction.response.send_message(f"✅ Item `{item_id}` movido para **{loja}**.", ephemeral=True)
+
+@tree.command(name="item_excluir", description="(Mestre) Excluir item do mundo (some até se equipado).")
+@only_master_channel()
+async def item_excluir(interaction: discord.Interaction, item_id: str):
+    item_id = item_id.lower().strip()
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("UPDATE items SET deleted=1, ativo=0 WHERE item_id=?", (item_id,))
+        await db.commit()
+    await interaction.response.send_message(f"🗑️ Item `{item_id}` removido do mundo (deleted=1).", ephemeral=True)
 # Livro de magias
 SPELLBOOK_SLOTS = 7
 
@@ -298,6 +515,247 @@ INITIAL_SHOP_ACTIVE = [
 ]
 
 # ==============================
+# FEITIÇOS / ESCOLA (DB)
+# ==============================
+
+ESCOLAS_SPELL = {"arcano", "igreja"}
+
+SPELLS_PER_PAGE = 7
+
+INITIAL_SPELLS: Dict[str, Dict[str, Any]] = {
+    # ====== ARCANO (mago) ======
+    "misseis_sucata": {
+        "nome": "Mísseis de Sucata",
+        "custo_mana": 6,
+        "preco": 420,
+        "escola": "arcano",
+        "efeito_tipo": "dano",
+        "efeito_valor": 12,
+        "tags": ["arcano", "metal"],
+        "classes": ["mago"],
+        "desc": "Projéteis improvisados de metal e energia. Dano moderado."
+    },
+    "pulso_ionico": {
+        "nome": "Pulso Iônico",
+        "custo_mana": 8,
+        "preco": 520,
+        "escola": "arcano",
+        "efeito_tipo": "util",
+        "efeito_valor": 2,
+        "tags": ["cibernético", "diretriz"],
+        "classes": ["mago"],
+        "desc": "Narrativa: interfere em sistemas cibernéticos por 2 turnos (stun/lock)."
+    },
+    "barreira_fractal": {
+        "nome": "Barreira Fractal",
+        "custo_mana": 7,
+        "preco": 480,
+        "escola": "arcano",
+        "efeito_tipo": "buff",
+        "efeito_valor": 2,
+        "tags": ["defesa", "arcano"],
+        "classes": ["mago"],
+        "desc": "Conjura proteção: +2 DEF (interpretação via total_stat/efeitos)."
+    },
+
+    # ====== IGREJA (clérigo) ======
+    "benção_do_aço": {
+        "nome": "Bênção do Aço",
+        "custo_mana": 6,
+        "preco": 430,
+        "escola": "igreja",
+        "efeito_tipo": "buff",
+        "efeito_valor": 2,
+        "tags": ["sagrado", "defesa"],
+        "classes": ["clerigo"],
+        "desc": "Benção protetora: +2 DEF (interpretação via efeitos)."
+    },
+    "cura_de_campo": {
+        "nome": "Cura de Campo",
+        "custo_mana": 8,
+        "preco": 560,
+        "escola": "igreja",
+        "efeito_tipo": "cura",
+        "efeito_valor": 14,
+        "tags": ["sagrado", "cura"],
+        "classes": ["clerigo"],
+        "desc": "Recupera 14 HP (cura direta)."
+    },
+    "exorcismo_ruidoso": {
+        "nome": "Exorcismo Ruidoso",
+        "custo_mana": 10,
+        "preco": 720,
+        "escola": "igreja",
+        "efeito_tipo": "dano",
+        "efeito_valor": 16,
+        "tags": ["sagrado", "demoníaco"],
+        "classes": ["clerigo"],
+        "desc": "Dano elevado contra entidades demoníacas (interpretação por tags)."
+    },
+}
+
+INITIAL_SPELLS_ACTIVE = [
+    "misseis_sucata", "barreira_fractal",
+    "cura_de_campo", "benção_do_aço"
+]
+
+
+async def spell_upsert(spell_id: str, s: Dict[str, Any]):
+    spell_id = spell_id.lower().strip()
+    escola = (s.get("escola") or "arcano").lower().strip()
+    if escola not in ESCOLAS_SPELL:
+        escola = "arcano"
+
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+        INSERT INTO spells(spell_id, nome, custo_mana, preco, escola, efeito_tipo, efeito_valor, tags_json, classes_json, desc, ativo, deleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+        ON CONFLICT(spell_id) DO UPDATE SET
+            nome=excluded.nome,
+            custo_mana=excluded.custo_mana,
+            preco=excluded.preco,
+            escola=excluded.escola,
+            efeito_tipo=excluded.efeito_tipo,
+            efeito_valor=excluded.efeito_valor,
+            tags_json=excluded.tags_json,
+            classes_json=excluded.classes_json,
+            desc=excluded.desc
+        """, (
+            spell_id,
+            s.get("nome", spell_id),
+            int(s.get("custo_mana", 0)),
+            int(s.get("preco", 0)),
+            escola,
+            s.get("efeito_tipo", "util"),
+            int(s.get("efeito_valor", 0)),
+            json.dumps(s.get("tags", []), ensure_ascii=False),
+            json.dumps(s.get("classes", []), ensure_ascii=False),
+            s.get("desc", "")
+        ))
+        await db.commit()
+
+
+async def spell_set_active(spell_id: str, ativo: bool):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("UPDATE spells SET ativo=? WHERE spell_id=? AND deleted=0", (1 if ativo else 0, spell_id.lower().strip()))
+        await db.commit()
+
+
+async def spell_get(spell_id: str) -> Optional[Dict[str, Any]]:
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM spells WHERE spell_id=?", (spell_id.lower().strip(),))
+        row = await cur.fetchone()
+        if not row:
+            return None
+        s = dict(row)
+        s["tags"] = json.loads(s.get("tags_json") or "[]")
+        s["classes"] = json.loads(s.get("classes_json") or "[]")
+        return s
+
+
+async def spell_list_active(escola: str, classe: Optional[str] = None) -> List[Dict[str, Any]]:
+    escola = (escola or "arcano").lower().strip()
+    if escola not in ESCOLAS_SPELL:
+        escola = "arcano"
+
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("""
+            SELECT * FROM spells
+            WHERE escola=? AND ativo=1 AND deleted=0
+            ORDER BY preco ASC, nome ASC
+        """, (escola,))
+        rows = await cur.fetchall()
+
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        s = dict(r)
+        s["tags"] = json.loads(s.get("tags_json") or "[]")
+        s["classes"] = json.loads(s.get("classes_json") or "[]")
+        if classe and classe not in s["classes"]:
+            continue
+        out.append(s)
+    return out
+
+
+async def seed_initial_spells():
+    for sid, s in INITIAL_SPELLS.items():
+        await spell_upsert(sid, s)
+    for sid in INITIAL_SPELLS_ACTIVE:
+        await spell_set_active(sid, True)
+
+
+def build_spellshop_embed(escola: str, page: int, spells: List[Dict[str, Any]]) -> discord.Embed:
+    total = len(spells)
+    total_pages = max(1, (total + SPELLS_PER_PAGE - 1) // SPELLS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+
+    start = page * SPELLS_PER_PAGE
+    end = start + SPELLS_PER_PAGE
+    chunk = spells[start:end]
+
+    titulo = "🔮 Escola Arcana — FEITIÇOS (ativos)" if escola == "arcano" else "⛪ Igreja — LITURGIAS (ativas)"
+
+    embed = discord.Embed(
+        title=titulo,
+        description=(
+            "Use **/aprender spell_id** para comprar e aprender.\n"
+            "Depois equipe com **/livro_equipar spell_id** (fora de narração).\n"
+        ),
+        color=discord.Color.purple()
+    )
+
+    for s in chunk:
+        sid = s["spell_id"]
+        preco = int(s["preco"])
+        mana = int(s["custo_mana"])
+        et = s.get("efeito_tipo", "util")
+        ev = int(s.get("efeito_valor", 0))
+        classes = ", ".join(s.get("classes", [])) or "—"
+        desc = (s.get("desc") or "").strip()
+        if desc:
+            desc = desc[:90] + ("…" if len(desc) > 90 else "")
+
+        embed.add_field(
+            name=f"**{s['nome']}** (`{sid}`)",
+            value=(
+                f"💰 **{preco}** | 🔵 Mana **{mana}**\n"
+                f"✨ {et.upper()} {ev} | 🎭 {classes}\n"
+                f"_{desc}_" if desc else f"✨ {et.upper()} {ev} | 🎭 {classes}"
+            ),
+            inline=False
+        )
+
+    embed.set_footer(text=f"Escola: {escola} • Página {page+1}/{total_pages} • Feitiços {start+1}-{min(end,total)} de {total}")
+    return embed
+
+
+class SpellShopView(discord.ui.View):
+    def __init__(self, user_id: int, escola: str, spells: List[Dict[str, Any]], page: int = 0):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.escola = escola
+        self.spells = spells
+        self.page = page
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.user_id
+
+    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page -= 1
+        await interaction.response.edit_message(embed=build_spellshop_embed(self.escola, self.page, self.spells), view=self)
+
+    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page += 1
+        await interaction.response.edit_message(embed=build_spellshop_embed(self.escola, self.page, self.spells), view=self)
+
+    @discord.ui.button(label="Fechar", style=discord.ButtonStyle.danger)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="✅ Escola fechada.", embed=None, view=None)
+# ==============================
 # UTIL / CHECKS
 # ==============================
 
@@ -525,26 +983,325 @@ async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
         # players
         await db.execute("""
-        CREATE TABLE IF NOT EXISTS players (
-            user_id INTEGER PRIMARY KEY,
-            classe TEXT,
-            level INTEGER,
-            xp INTEGER,
-            gold INTEGER,
-            pontos INTEGER,
-            hp INTEGER,
-            mana INTEGER,
-            stamina INTEGER,
-            max_stamina INTEGER,
-            rest_until_ts INTEGER,
-            last_hunt_ts INTEGER,
-            stats_json TEXT,
-            inventario_json TEXT,
-            equipado_json TEXT,
-            spellbook_json TEXT
+        CREATE TABLE IF NOT EXISTS items (
+            item_id TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            slot TEXT NOT NULL,
+            preco INTEGER NOT NULL,
+            bonus_json TEXT NOT NULL,
+            efeito_json TEXT NOT NULL,
+            classes_json TEXT NOT NULL,
+            desc TEXT NOT NULL,
+            loja TEXT NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 0,
+            deleted INTEGER NOT NULL DEFAULT 0
         )
         """)
 
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_items_loja_ativo ON items(loja, ativo, deleted)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_items_tipo ON items(tipo, deleted)")
+
+# ==============================
+# LOJAS / CATÁLOGO (DB driven)
+# ==============================
+
+LOJAS_VALIDAS = {"mercador", "ferreiro", "alfaiate", "arcano", "igreja"}
+
+# Itens iniciais (catálogo) - você pode editar aqui no código pra ser mais rápido
+INITIAL_ITEMS: Dict[str, Dict[str, Any]] = {
+    # ===== CONSUMÍVEIS (Mercador) =====
+    "pocao_vida": {
+        "nome": "Poção de Vida",
+        "preco": 200,
+        "tipo": "consumivel",
+        "slot": "consumivel",
+        "efeito": {"hp": 20},
+        "bonus": {},
+        "classes": [],
+        "desc": "Recupera 20 HP.",
+        "loja": "mercador",
+    },
+    "pocao_mana": {
+        "nome": "Poção de Mana",
+        "preco": 200,
+        "tipo": "consumivel",
+        "slot": "consumivel",
+        "efeito": {"mana": 20},
+        "bonus": {},
+        "classes": [],
+        "desc": "Recupera 20 Mana.",
+        "loja": "mercador",
+    },
+
+    # ===== ESPECIAIS (Mercador) =====
+    "tablet_hacker": {
+        "nome": "Tablet Terminal Hacker",
+        "preco": 1900,
+        "tipo": "especial",
+        "slot": "especial",
+        "efeito": {"hack_stun_turns": 2},
+        "bonus": {},
+        "classes": ["mago", "clerigo"],
+        "desc": "Narrativa: hack desativa cibernéticos por 2 turnos.",
+        "loja": "mercador",
+    },
+
+    # ===== ANÉIS (Ferreiro) =====
+    "anel_do_vigor": {
+        "nome": "Anel do Vigor",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 520,
+        "bonus": {"atk": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Um anel simples que fortalece o corpo do portador.",
+        "loja": "ferreiro",
+    },
+    "anel_da_guarda": {
+        "nome": "Anel da Guarda",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 560,
+        "bonus": {"defesa": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Gravado com runas antigas de proteção.",
+        "loja": "ferreiro",
+    },
+    "anel_da_sabedoria": {
+        "nome": "Anel da Sabedoria",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 620,
+        "bonus": {"magia": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Um cristal antigo amplifica o poder arcano.",
+        "loja": "arcano",
+    },
+    "anel_da_sombra": {
+        "nome": "Anel da Sombra",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 580,
+        "bonus": {"furtividade": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Usado por ladrões e exploradores das ruínas.",
+        "loja": "ferreiro",
+    },
+    "anel_da_agilidade": {
+        "nome": "Anel da Agilidade",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 580,
+        "bonus": {"destreza": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Leve como o vento, acelera os reflexos.",
+        "loja": "alfaiate",
+    },
+    "anel_da_sorte_antiga": {
+        "nome": "Anel da Sorte Antiga",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 650,
+        "bonus": {"sorte": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Relíquia de um cassino pré-guerra.",
+        "loja": "mercador",
+    },
+    "anel_de_aco_negro": {
+        "nome": "Anel de Aço Negro",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1050,
+        "bonus": {"defesa": 2},
+        "efeito": {},
+        "classes": [],
+        "desc": "Forjado nas fornalhas de um ferreiro antigo.",
+        "loja": "ferreiro",
+    },
+    "anel_arcano": {
+        "nome": "Anel Arcano",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1200,
+        "bonus": {"magia": 2},
+        "efeito": {},
+        "classes": ["mago"],
+        "desc": "Amplifica feitiços de magos experientes.",
+        "loja": "arcano",
+    },
+    "anel_do_cacador": {
+        "nome": "Anel do Caçador",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1150,
+        "bonus": {"atk": 2},
+        "efeito": {},
+        "classes": ["arqueiro", "assassino"],
+        "desc": "Preferido pelos caçadores das zonas irradiadas.",
+        "loja": "ferreiro",
+    },
+    "anel_da_luz_sagrada": {
+        "nome": "Anel da Luz Sagrada",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1350,
+        "bonus": {"magia": 2},
+        "efeito": {"cura_bonus": 1},
+        "classes": ["clerigo"],
+        "desc": "Relíquia usada por clérigos nas antigas catedrais.",
+        "loja": "igreja",
+    },
+
+    # ===== ITENS ARCANOS (Arcano) =====
+    "cajado_serpente": {
+        "nome": "Cajado da Serpente",
+        "preco": 340,
+        "tipo": "cajado",
+        "slot": "cajado",
+        "bonus": {"magia": 2},
+        "efeito": {},
+        "classes": ["mago", "clerigo"],
+        "desc": "+2 MAGIA.",
+        "loja": "arcano",
+    },
+    "grimorio_fissura": {
+        "nome": "Grimório da Fissura",
+        "preco": 900,
+        "tipo": "livro",
+        "slot": "especial",
+        "bonus": {"magia": 2},
+        "efeito": {"mana": 5},
+        "classes": ["mago"],
+        "desc": "Um tomo pré-guerra que aumenta o foco arcano. +2 MAGIA, +5 Mana máx (efeito).",
+        "loja": "arcano",
+    },
+
+    # ===== IGREJA (Igreja) =====
+    "sino_do_juizo": {
+        "nome": "Sino do Juízo",
+        "preco": 850,
+        "tipo": "reliquia",
+        "slot": "especial",
+        "bonus": {"defesa": 1},
+        "efeito": {"cura_bonus": 2},
+        "classes": ["clerigo"],
+        "desc": "Ressoa contra o caos. +2 cura (efeito), +1 DEF.",
+        "loja": "igreja",
+    },
+    "livro_hinos": {
+        "nome": "Livro de Hinos",
+        "preco": 500,
+        "tipo": "livro",
+        "slot": "especial",
+        "bonus": {"magia": 1},
+        "efeito": {"cura_bonus": 1},
+        "classes": ["clerigo"],
+        "desc": "Cantos antigos amplificam bençãos. +1 MAGIA, +1 cura.",
+        "loja": "igreja",
+    },
+}
+
+# Quais itens começam "ativos" na vitrine (o resto existe, mas fica desativado até você ativar)
+INITIAL_ACTIVE_IDS = [
+    "pocao_vida", "pocao_mana", "tablet_hacker",
+    # Anéis (ativos pra já aparecer)
+    "anel_do_vigor", "anel_da_guarda", "anel_da_sabedoria", "anel_da_sorte_antiga",
+    # Arcano/Igreja
+    "cajado_serpente", "livro_hinos"
+]
+
+
+async def item_upsert(item_id: str, it: Dict[str, Any]):
+    loja = (it.get("loja") or "mercador").lower().strip()
+    if loja not in LOJAS_VALIDAS:
+        loja = "mercador"
+
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+        INSERT INTO items(item_id, nome, tipo, slot, preco, bonus_json, efeito_json, classes_json, desc, loja, ativo, deleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+        ON CONFLICT(item_id) DO UPDATE SET
+            nome=excluded.nome,
+            tipo=excluded.tipo,
+            slot=excluded.slot,
+            preco=excluded.preco,
+            bonus_json=excluded.bonus_json,
+            efeito_json=excluded.efeito_json,
+            classes_json=excluded.classes_json,
+            desc=excluded.desc,
+            loja=excluded.loja
+        """, (
+            item_id,
+            it.get("nome", item_id),
+            it.get("tipo", "especial"),
+            it.get("slot", it.get("tipo", "especial")),
+            int(it.get("preco", 0)),
+            json.dumps(it.get("bonus", {}), ensure_ascii=False),
+            json.dumps(it.get("efeito", {}), ensure_ascii=False),
+            json.dumps(it.get("classes", []), ensure_ascii=False),
+            it.get("desc", ""),
+            loja
+        ))
+        await db.commit()
+
+
+async def item_set_active(item_id: str, ativo: bool):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("UPDATE items SET ativo=? WHERE item_id=? AND deleted=0", (1 if ativo else 0, item_id))
+        await db.commit()
+
+
+async def item_get(item_id: str) -> Optional[Dict[str, Any]]:
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM items WHERE item_id=?", (item_id,))
+        row = await cur.fetchone()
+        if not row:
+            return None
+        it = dict(row)
+        it["bonus"] = json.loads(it.get("bonus_json") or "{}")
+        it["efeito"] = json.loads(it.get("efeito_json") or "{}")
+        it["classes"] = json.loads(it.get("classes_json") or "[]")
+        return it
+
+
+async def items_list_active(loja: str) -> List[Dict[str, Any]]:
+    loja = loja.lower().strip()
+    if loja not in LOJAS_VALIDAS:
+        loja = "mercador"
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("""
+            SELECT * FROM items
+            WHERE loja=? AND ativo=1 AND deleted=0
+            ORDER BY preco ASC, nome ASC
+        """, (loja,))
+        rows = await cur.fetchall()
+        out = []
+        for r in rows:
+            it = dict(r)
+            it["bonus"] = json.loads(it.get("bonus_json") or "{}")
+            it["efeito"] = json.loads(it.get("efeito_json") or "{}")
+            it["classes"] = json.loads(it.get("classes_json") or "[]")
+            out.append(it)
+        return out
+
+
+async def seed_initial_items():
+    # UPSERT em todos os itens iniciais
+    for item_id, it in INITIAL_ITEMS.items():
+        await item_upsert(item_id, it)
+
+    # ativa os iniciais (sem desativar os seus customizados)
+    for iid in INITIAL_ACTIVE_IDS:
+        await item_set_active(iid, True)
         # items catalog
         await db.execute("""
         CREATE TABLE IF NOT EXISTS items (
@@ -594,6 +1351,26 @@ async def init_db():
             deleted INTEGER NOT NULL DEFAULT 0
         )
         """)
+
+                await db.execute("""
+        CREATE TABLE IF NOT EXISTS spells (
+            spell_id TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            custo_mana INTEGER NOT NULL,
+            preco INTEGER NOT NULL,
+            escola TEXT NOT NULL,              -- "arcano" ou "igreja"
+            efeito_tipo TEXT NOT NULL,         -- "dano", "cura", "buff", "util"
+            efeito_valor INTEGER NOT NULL,     -- número (ex: 12)
+            tags_json TEXT NOT NULL,           -- ["cibernetico","radiação"...]
+            classes_json TEXT NOT NULL,        -- ["mago"] etc
+            desc TEXT NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 0,
+            deleted INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
 
         await db.commit()
 
@@ -2878,6 +3655,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
