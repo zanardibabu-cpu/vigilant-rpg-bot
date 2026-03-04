@@ -2523,25 +2523,29 @@ async def albergue(interaction: discord.Interaction):
 # MAGIAS (Jogador) — Livro de Magias
 # ==============================
 
-@tree.command(name="magias", description="Listar magias disponíveis para sua classe.")
+@tree.command(name="magias", description="Listar magias que você conhece.")
 async def magias(interaction: discord.Interaction):
     p = await require_player(interaction)
     if not p:
         return
-    if not can_use_spellbook(p["classe"]):
-        await interaction.response.send_message("❌ Sua classe não usa magias.", ephemeral=True)
-        return
 
-    spells = await spell_list_for_class(p["classe"])
-    if not spells:
-        await interaction.response.send_message("📖 Nenhuma magia cadastrada ainda.", ephemeral=True)
+    known = p.get("known_spells") or []
+    if not known:
+        await interaction.response.send_message("📖 Você ainda não aprendeu nenhuma magia. Use **/escola**.", ephemeral=True)
         return
 
     lines = []
-    for s in spells[:60]:
-        lines.append(f"• `{s['spell_id']}` — {s['nome']} (custo {s['custo']}, {s['efeito_tipo']} {s['efeito_valor']})")
+    for sid in known[:80]:
+        s = await spell_get(sid)
+        if not s or int(s.get("deleted", 0)) == 1:
+            continue
+        lines.append(f"• `{sid}` — **{s['nome']}** (mana {s['custo_mana']}, {s['efeito_tipo']} {s['efeito_valor']})")
 
-    await interaction.response.send_message("📖 **Magias disponíveis:**\n" + "\n".join(lines), ephemeral=True)
+    if not lines:
+        await interaction.response.send_message("📖 Suas magias foram removidas do mundo.", ephemeral=True)
+        return
+
+    await interaction.response.send_message("📖 **Magias conhecidas:**\n" + "\n".join(lines), ephemeral=True)
 
 @tree.command(name="livro_equipar", description="Equipar magia no livro (mago/clérigo).")
 @app_commands.describe(spell_id="ID da magia")
@@ -2600,24 +2604,36 @@ async def livro_desequipar(interaction: discord.Interaction, spell_id: str):
     if not p:
         return
 
-    if not can_use_spellbook(p["classe"]):
+    # classe pode usar livro?
+    if not can_use_spellbook(p.get("classe", "")):
         await interaction.response.send_message("❌ Sua classe não usa livro de magias.", ephemeral=True)
         return
 
+    # trava em narração
     if narration_is_on(interaction):
         await interaction.response.send_message("❌ Não é possível trocar o livro com **NARRAÇÃO ON**.", ephemeral=True)
         return
 
     spell_id = spell_id.lower().strip()
-    book = p.get("spellbook") or []
+
+    # garante formato lista mesmo em saves antigos
+    book = p.get("spellbook", [])
+    if isinstance(book, str):
+        try:
+            book = json.loads(book)
+        except Exception:
+            book = []
+    if not isinstance(book, list):
+        book = []
+
     if spell_id not in book:
         await interaction.response.send_message("⚠️ Essa magia não está no seu livro.", ephemeral=True)
         return
 
     book.remove(spell_id)
     p["spellbook"] = book
-    await save_player(p)
 
+    await save_player(p)
     await interaction.response.send_message(f"✅ Removeu `{spell_id}` do livro.", ephemeral=True)
 
 # ==============================
@@ -3112,7 +3128,84 @@ async def daritem(interaction: discord.Interaction, membro: discord.Member, item
     await interaction.response.send_message(f"🎁 Mestre deu **{it['nome']}** x{quantidade} para {membro.mention}.", ephemeral=False)
 
 # ---------- ITENS: criar/editar/excluir + loja + baú
+@tree.command(name="spell_criar", description="(Mestre) Criar/atualizar feitiço.")
+@only_master_channel()
+@app_commands.describe(
+    spell_id="id unico ex: cura_maior",
+    nome="nome exibido",
+    custo_mana="custo em mana",
+    preco="preço em gold",
+    escola="arcano ou igreja",
+    efeito_tipo="dano|cura|buff|util",
+    efeito_valor="valor numérico",
+    tags_json='JSON list ex: ["cibernético","radiação"]',
+    classes_json='JSON list ex: ["mago"]',
+    desc="descrição"
+)
+async def spell_criar(
+    interaction: discord.Interaction,
+    spell_id: str,
+    nome: str,
+    custo_mana: int,
+    preco: int,
+    escola: str,
+    efeito_tipo: str,
+    efeito_valor: int,
+    tags_json: str = "",
+    classes_json: str = "",
+    desc: str = ""
+):
+    spell_id = spell_id.lower().strip()
+    escola = (escola or "arcano").lower().strip()
+    if escola not in ESCOLAS_SPELL:
+        await interaction.response.send_message("❌ Escola inválida (arcano/igreja).", ephemeral=True)
+        return
 
+    s = {
+        "nome": nome,
+        "custo_mana": int(custo_mana),
+        "preco": int(preco),
+        "escola": escola,
+        "efeito_tipo": (efeito_tipo or "util").lower().strip(),
+        "efeito_valor": int(efeito_valor),
+        "tags": parse_json_list(tags_json),
+        "classes": parse_json_list(classes_json),
+        "desc": desc
+    }
+    await spell_upsert(spell_id, s)
+    await interaction.response.send_message(f"✅ Feitiço `{spell_id}` criado/atualizado.", ephemeral=True)
+
+
+@tree.command(name="spell_ativar", description="(Mestre) Ativar feitiço na escola.")
+@only_master_channel()
+async def spell_ativar(interaction: discord.Interaction, spell_id: str):
+    s = await spell_get(spell_id)
+    if not s or int(s.get("deleted", 0)) == 1:
+        await interaction.response.send_message("❌ Feitiço não existe (ou foi removido).", ephemeral=True)
+        return
+    await spell_set_active(spell_id, True)
+    await interaction.response.send_message(f"✅ `{spell_id}` ativado.", ephemeral=True)
+
+
+@tree.command(name="spell_desativar", description="(Mestre) Desativar feitiço da escola.")
+@only_master_channel()
+async def spell_desativar(interaction: discord.Interaction, spell_id: str):
+    s = await spell_get(spell_id)
+    if not s:
+        await interaction.response.send_message("❌ Feitiço não existe.", ephemeral=True)
+        return
+    await spell_set_active(spell_id, False)
+    await interaction.response.send_message(f"✅ `{spell_id}` desativado.", ephemeral=True)
+
+
+@tree.command(name="spell_excluir", description="(Mestre) Excluir feitiço do mundo (deleted=1).")
+@only_master_channel()
+async def spell_excluir(interaction: discord.Interaction, spell_id: str):
+    spell_id = spell_id.lower().strip()
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("UPDATE spells SET deleted=1, ativo=0 WHERE spell_id=?", (spell_id,))
+        await db.commit()
+    await interaction.response.send_message(f"🗑️ Feitiço `{spell_id}` removido do mundo.", ephemeral=True)
 @tree.command(name="item_criar", description="(Mestre) Criar item no catálogo.")
 @only_master_channel()
 async def item_criar(
@@ -3655,6 +3748,7 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
+
 
 
 
