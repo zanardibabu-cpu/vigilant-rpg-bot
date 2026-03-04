@@ -3754,7 +3754,6 @@ client.run(TOKEN)
 
 
 
-=======
 
 # ==============================
 # LOJAS / CATÁLOGO (DB driven)
