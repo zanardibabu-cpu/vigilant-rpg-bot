@@ -368,7 +368,7 @@ class ShopView(discord.ui.View):
 
 @tree.command(name="loja", description="Ver itens ativos de uma loja (paginado).")
 @only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja")
+@app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja|armaduras")
 async def loja_cmd(interaction: discord.Interaction, loja: str = "mercador"):
     p = await require_player(interaction)
     if not p:
@@ -470,7 +470,7 @@ async def item_desativar(interaction: discord.Interaction, item_id: str):
 
 @tree.command(name="item_mover", description="(Mestre) Mover item para outra loja.")
 @only_master_channel()
-@app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja")
+@app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja|armaduras")
 async def item_mover(interaction: discord.Interaction, item_id: str, loja: str):
     item_id = item_id.lower().strip()
     loja = (loja or "").lower().strip()
@@ -581,6 +581,28 @@ INIMIGOS_FRACOS = [
     {"nome": "Ladrão Maneta",    "xp": (4, 10), "gold": (2, 12), "tags": ["orgânico"]},
     {"nome": "Mendigo Ousado",   "xp": (2, 7),  "gold": (0, 5),  "tags": ["orgânico"]},
 ]
+
+
+def enemy_get_stats(enemy: Dict[str, Any]) -> Tuple[int, int]:
+    """Return (hp, def) for an enemy. If missing in dict, generate sane defaults by tier."""
+    # weak enemies: lower stats
+    tags = enemy.get("tags", []) or []
+    # If explicit:
+    if "hp" in enemy and "def" in enemy:
+        return int(enemy["hp"]), int(enemy["def"])
+    # Heuristic defaults
+    base_hp = 14
+    base_def = 1
+    if "cibernético" in tags:
+        base_hp += 4
+        base_def += 1
+    if "irradiado" in tags or "mutante" in tags:
+        base_hp += 6
+    # add randomness
+    hp = int(enemy.get("hp", random.randint(base_hp, base_hp + 10)))
+    df = int(enemy.get("def", random.randint(base_def, base_def + 2)))
+    return hp, df
+
 
 # ==============================
 # POOLS DE DROP (só itens ATIVOS)
@@ -731,6 +753,112 @@ INITIAL_ITEMS = {
         "bonus": {"magia": 2},
         "desc": "Relíquia usada por clérigos nas antigas catedrais."
     },
+
+    # ====== FERREIRO (armas) ======
+    "espada_aco": {
+        "nome": "Espada de Aço",
+        "preco": 650,
+        "tipo": "arma",
+        "slot": "arma",
+        "efeito": {},
+        "bonus": {"atk": 2},
+        "classes": ["barbaro", "executor"],
+        "loja": "ferreiro",
+        "desc": "Aço antigo retemperado. Confiável e letal."
+    },
+    "machado_sucata": {
+        "nome": "Machado de Sucata Reforçado",
+        "preco": 900,
+        "tipo": "arma",
+        "slot": "arma",
+        "efeito": {},
+        "bonus": {"atk": 3, "destreza": -1},
+        "classes": ["barbaro"],
+        "loja": "ferreiro",
+        "desc": "Pesado. Quando acerta, abre caminho."
+    },
+    "lamina_executor": {
+        "nome": "Lâmina do Executor",
+        "preco": 1450,
+        "tipo": "arma",
+        "slot": "arma",
+        "efeito": {},
+        "bonus": {"atk": 4, "sorte": 1},
+        "classes": ["executor"],
+        "loja": "ferreiro",
+        "desc": "Equilíbrio perfeito. Feita para terminar lutas rápido."
+    },
+
+    # ====== ARCANO (mago / clérigo) ======
+    "cajado_condutor": {
+        "nome": "Cajado Condutor",
+        "preco": 700,
+        "tipo": "arma",
+        "slot": "arma",
+        "efeito": {},
+        "bonus": {"magia": 2},
+        "classes": ["mago", "clerigo"],
+        "loja": "arcano",
+        "desc": "Canaliza energia residual do pré-guerra."
+    },
+    "grimorio_riscado": {
+        "nome": "Grimório Riscado",
+        "preco": 1200,
+        "tipo": "amuleto",
+        "slot": "amuleto",
+        "efeito": {},
+        "bonus": {"magia": 3, "sorte": 1},
+        "classes": ["mago"],
+        "loja": "arcano",
+        "desc": "Anotações em código. Aumenta sua precisão arcana."
+    },
+    "rosario_bento": {
+        "nome": "Rosário Bento",
+        "preco": 1100,
+        "tipo": "amuleto",
+        "slot": "amuleto",
+        "efeito": {},
+        "bonus": {"magia": 2, "defesa": 1},
+        "classes": ["clerigo"],
+        "loja": "arcano",
+        "desc": "Símbolo de fé. Protege e fortalece rituais."
+    },
+
+    # ====== ARMADURAS (loja dedicada) ======
+    "couraça_couro": {
+        "nome": "Couraça de Couro Remendada",
+        "preco": 550,
+        "tipo": "armadura",
+        "slot": "armadura",
+        "efeito": {},
+        "bonus": {"defesa": 2},
+        "classes": [],
+        "loja": "armaduras",
+        "desc": "Leve. Boa para começar sem morrer em 2 hits."
+    },
+    "armadura_malha": {
+        "nome": "Armadura de Malha",
+        "preco": 1200,
+        "tipo": "armadura",
+        "slot": "armadura",
+        "efeito": {},
+        "bonus": {"defesa": 4, "destreza": -1},
+        "classes": ["barbaro", "executor"],
+        "loja": "armaduras",
+        "desc": "Mais proteção, menos agilidade."
+    },
+    "manto_radioprotecao": {
+        "nome": "Manto de Radioproteção",
+        "preco": 1350,
+        "tipo": "armadura",
+        "slot": "armadura",
+        "efeito": {},
+        "bonus": {"defesa": 3, "magia": 1},
+        "classes": ["mago", "clerigo"],
+        "loja": "armaduras",
+        "desc": "Tecelagem com fibras tratadas. Ideal para conjuradores."
+    },
+
 }
 
 INITIAL_SHOP_ACTIVE = [
@@ -1126,7 +1254,7 @@ async def init_db():
 # LOJAS / CATÁLOGO (DB driven)
 # ==============================
 
-LOJAS_VALIDAS = {"mercador", "ferreiro", "alfaiate", "arcano", "igreja"}
+LOJAS_VALIDAS = {"mercador", "ferreiro", "alfaiate", "arcano", "igreja", "armaduras"}
 
 # Itens iniciais (catálogo) - você pode editar aqui no código pra ser mais rápido
 INITIAL_ITEMS: Dict[str, Dict[str, Any]] = {
@@ -1331,6 +1459,10 @@ INITIAL_ITEMS: Dict[str, Dict[str, Any]] = {
 # Quais itens começam "ativos" na vitrine (o resto existe, mas fica desativado até você ativar)
 INITIAL_ACTIVE_IDS = [
     "pocao_vida", "pocao_mana", "tablet_hacker",
+    # Novas lojas
+    "espada_aco", "machado_sucata", "lamina_executor",
+    "cajado_condutor", "grimorio_riscado", "rosario_bento",
+    "couraça_couro", "armadura_malha", "manto_radioprotecao",
     # Anéis (ativos pra já aparecer)
     "anel_do_vigor", "anel_da_guarda", "anel_da_sabedoria", "anel_da_sorte_antiga",
     # Arcano/Igreja
@@ -1931,6 +2063,63 @@ class BandidosView(discord.ui.View):
                 ephemeral=False
             )
 
+
+
+# ==============================
+# X1 / DUELOS
+# ==============================
+# pending_duels[target_id] = (challenger_id, created_ts)
+PENDING_DUELS: Dict[int, Tuple[int, int]] = {}
+# active_duels maps a user_id to the opponent_id for quick checks
+ACTIVE_DUELS: Dict[int, int] = {}
+
+# duel_state[key] = {"a":id_a, "b":id_b, "turn":user_id, "created":ts}
+DUEL_STATE: Dict[str, Dict[str, Any]] = {}
+
+def duel_key(a: int, b: int) -> str:
+    x, y = (a, b) if a < b else (b, a)
+    return f"{x}:{y}"
+
+async def end_duel(winner_id: int, loser_id: int, reason: str, interaction: discord.Interaction):
+    """Encerra duelo, transfere 10% do gold do perdedor para o vencedor e limpa estados."""
+    # 10% gold transfer (floor)
+    winner = await get_player(winner_id)
+    loser = await get_player(loser_id)
+
+    transfer = 0
+    if winner and loser:
+        loser_gold = int(loser.get("gold", 0))
+        transfer = max(0, loser_gold // 10)
+        if transfer > 0:
+            loser["gold"] = loser_gold - transfer
+            winner["gold"] = int(winner.get("gold", 0)) + transfer
+            await save_player(loser)
+            await save_player(winner)
+
+        # permadeath if hp <= -1 (delete record)
+        if int(loser.get("hp", 0)) <= -1:
+            async with aiosqlite.connect(DB_FILE) as db:
+                await db.execute("DELETE FROM players WHERE user_id=?", (loser_id,))
+                await db.commit()
+
+    # cleanup
+    ACTIVE_DUELS.pop(winner_id, None)
+    ACTIVE_DUELS.pop(loser_id, None)
+    DUEL_STATE.pop(duel_key(winner_id, loser_id), None)
+
+    msg = (
+        f"🏁 **Duelo encerrado** — {reason}\n"
+        f"🏆 Vencedor: <@{winner_id}>\n"
+        f"💀 Perdedor: <@{loser_id}>\n"
+        f"💰 Transferência: **{transfer} gold** (10% do total do perdedor)."
+    )
+
+    # se já respondeu antes, usa followup
+    if interaction.response.is_done():
+        await interaction.followup.send(msg, ephemeral=False)
+    else:
+        await interaction.response.send_message(msg, ephemeral=False)
+
 # ==============================
 # COMANDOS — JOGADOR
 # ==============================
@@ -2044,6 +2233,144 @@ async def perfil(interaction: discord.Interaction):
             embed.add_field(name=f"📖 Livro de Magias (até {SPELLBOOK_SLOTS})", value="_vazio_", inline=False)
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+
+@tree.command(name="x1", description="Desafiar um jogador para duelo (precisa ser aceito).")
+@app_commands.describe(membro="Jogador desafiado")
+async def x1(interaction: discord.Interaction, membro: discord.Member):
+    if membro.bot:
+        await interaction.response.send_message("🤖 Você não pode duelar com bots.", ephemeral=True)
+        return
+    if membro.id == interaction.user.id:
+        await interaction.response.send_message("😅 Você não pode se desafiar.", ephemeral=True)
+        return
+
+    p1 = await get_player(interaction.user.id)
+    if not p1:
+        await interaction.response.send_message("❌ Você não tem personagem. Use **/start**.", ephemeral=True)
+        return
+    p2 = await get_player(membro.id)
+    if not p2:
+        await interaction.response.send_message("❌ O jogador desafiado não tem personagem. Ele precisa usar **/start**.", ephemeral=True)
+        return
+
+    # bloqueios
+    if await blocked_by_rest(interaction, p1):
+        return
+
+    if interaction.user.id in ACTIVE_DUELS or membro.id in ACTIVE_DUELS:
+        await interaction.response.send_message("⚠️ Um de vocês já está em duelo ativo.", ephemeral=True)
+        return
+
+    PENDING_DUELS[membro.id] = (interaction.user.id, now_ts())
+    await interaction.response.send_message(
+        f"⚔️ {interaction.user.mention} desafiou {membro.mention} para um **X1**!\n"
+        f"{membro.mention}, para aceitar use **/aceitar_duelo**.",
+        ephemeral=False
+    )
+
+@tree.command(name="aceitar_duelo", description="Aceitar um duelo pendente (X1).")
+async def aceitar_duelo(interaction: discord.Interaction):
+    pend = PENDING_DUELS.get(interaction.user.id)
+    if not pend:
+        await interaction.response.send_message("❌ Você não tem nenhum duelo pendente.", ephemeral=True)
+        return
+
+    challenger_id, created = pend
+    # expira em 5 minutos
+    if now_ts() - int(created) > 300:
+        PENDING_DUELS.pop(interaction.user.id, None)
+        await interaction.response.send_message("⌛ Esse desafio expirou. Peça para desafiarem novamente.", ephemeral=True)
+        return
+
+    # valida challenger ainda existe
+    p1 = await get_player(challenger_id)
+    p2 = await get_player(interaction.user.id)
+    if not p1 or not p2:
+        PENDING_DUELS.pop(interaction.user.id, None)
+        await interaction.response.send_message("❌ Um dos jogadores não tem personagem. Use **/start**.", ephemeral=True)
+        return
+
+    if challenger_id in ACTIVE_DUELS or interaction.user.id in ACTIVE_DUELS:
+        PENDING_DUELS.pop(interaction.user.id, None)
+        await interaction.response.send_message("⚠️ Um de vocês já está em duelo ativo.", ephemeral=True)
+        return
+
+    # ativa
+    PENDING_DUELS.pop(interaction.user.id, None)
+    ACTIVE_DUELS[challenger_id] = interaction.user.id
+    ACTIVE_DUELS[interaction.user.id] = challenger_id
+
+    # inicia estado (challenger começa)
+    DUEL_STATE[duel_key(challenger_id, interaction.user.id)] = {
+        "a": challenger_id,
+        "b": interaction.user.id,
+        "turn": challenger_id,
+        "created": now_ts(),
+    }
+
+    await interaction.response.send_message(
+        f"✅ Duelo aceito! ⚔️ <@{challenger_id}> vs {interaction.user.mention}\n"
+        f"🔁 **Turno inicial:** <@{challenger_id}>\n"
+        f"Para atacar use **/atacar_duelo** (um ataque por turno).",
+        ephemeral=False
+    )
+@tree.command(name="atacar_duelo", description="Atacar no duelo X1 (d20 + ATK - DEF).")
+async def atacar_duelo(interaction: discord.Interaction):
+    opp_id = ACTIVE_DUELS.get(interaction.user.id)
+    if not opp_id:
+        await interaction.response.send_message("❌ Você não está em um duelo ativo. Use **/x1** para desafiar alguém.", ephemeral=True)
+        return
+
+    key = duel_key(interaction.user.id, opp_id)
+    st = DUEL_STATE.get(key)
+    if not st:
+        # estado ausente — limpa e avisa
+        ACTIVE_DUELS.pop(interaction.user.id, None)
+        ACTIVE_DUELS.pop(opp_id, None)
+        await interaction.response.send_message("⚠️ Estado do duelo perdido. Desafie novamente com **/x1**.", ephemeral=True)
+        return
+
+    if st.get("turn") != interaction.user.id:
+        await interaction.response.send_message(f"⏳ Não é seu turno. Turno de <@{st.get('turn')}>.", ephemeral=True)
+        return
+
+    p_atk = await get_player(interaction.user.id)
+    p_def = await get_player(opp_id)
+    if not p_atk or not p_def:
+        await interaction.response.send_message("❌ Um dos jogadores não tem personagem. Use **/start**.", ephemeral=True)
+        return
+
+    # rolagem
+    d20 = random.randint(1, 20)
+    atk = await total_stat(p_atk, "atk")
+    def_opp = await total_stat(p_def, "defesa")
+
+    dano = max(0, int(d20) + int(atk) - int(def_opp))
+    p_def["hp"] = int(p_def.get("hp", 0)) - int(dano)
+
+    await save_player(p_def)
+
+    # resposta
+    await interaction.response.send_message(
+        f"⚔️ **Duelo X1**\n"
+        f"<@{interaction.user.id}> atacou <@{opp_id}>\n"
+        f"🎲 d20: **{d20}** | ⚔ ATK: **{atk}** | 🛡 DEF (alvo): **{def_opp}**\n"
+        f"💥 Dano: **{dano}**\n"
+        f"❤ HP do alvo: **{p_def['hp']}**",
+        ephemeral=False
+    )
+
+    # derrota?
+    if int(p_def["hp"]) <= 0:
+        # encerra: vencedor é atacante
+        await end_duel(interaction.user.id, opp_id, "KO (HP ≤ 0)", interaction)
+        return
+
+    # passa turno
+    st["turn"] = opp_id
+    DUEL_STATE[key] = st
 
 @tree.command(name="comandos", description="Lista resumida de comandos.")
 @only_channel(CANAL_COMANDOS_ID, "comandos-dos-players")
@@ -2646,6 +2973,7 @@ async def cacar(interaction: discord.Interaction):
     if random.random() < INIMIGOS_FRACOS_CHANCE:
 
         inimigo = random.choice(INIMIGOS_FRACOS)
+        inimigo_hp, inimigo_def = enemy_get_stats(inimigo)
 
         xp_gain = random.randint(*inimigo["xp"])
         gold_gain = random.randint(*inimigo["gold"])
@@ -2669,6 +2997,7 @@ async def cacar(interaction: discord.Interaction):
             title="⚔️ CAÇADA — VIGILLANT",
             description=(
                 f"👹 Alvo: **{inimigo['nome']}**\n"
+                f"❤ Inimigo HP: **{inimigo_hp}** | 🛡 DEF: **{inimigo_def}**\n"
                 f"🎲 Abate fácil.\n\n"
                 f"❤ HP: **{p['hp']}** | 🥵 Stamina: **{p['stamina']}/{p['max_stamina']}**"
             ),
@@ -2859,6 +3188,12 @@ async def spawn(
     # aplica classe e base
     p["classe"] = classe
     base_stats = CLASSES[classe].copy()
+
+    # se foi criado agora (ou reset), reaplica recursos base de lvl1
+    if do_reset or p.get('level', 1) == 1:
+        p['hp'] = int(base_stats.get('hp_base', p.get('hp', 0)))
+        p['mana'] = int(base_stats.get('mana_base', p.get('mana', 0)))
+        p['stamina'] = int(p.get('max_stamina', STAMINA_MAX))
 
     # overrides se vierem
     if atk is not None: base_stats["atk"] = int(atk)
