@@ -32,6 +32,10 @@ if not TOKEN:
 
 MESTRE_ID = 1255256495369748573  # Cannabinoide
 
+# Para aparecer comandos slash instantaneamente (recomendado no Railway), defina GUILD_ID (ID do servidor) como variável de ambiente.
+GUILD_ID = int(os.getenv("GUILD_ID", "0") or "0")
+
+
 # Canais (IDs fornecidos por você)
 CANAL_BEM_VINDO_ID = 1472100698211483679
 CANAL_COMANDOS_ID  = 1472216958647795965
@@ -2076,9 +2080,126 @@ ACTIVE_DUELS: Dict[int, int] = {}
 # duel_state[key] = {"a":id_a, "b":id_b, "turn":user_id, "created":ts}
 DUEL_STATE: Dict[str, Dict[str, Any]] = {}
 
+class DuelView(discord.ui.View):
+    """Botões do duelo X1. (Não persiste após restart do bot)."""
+    def __init__(self, key: str):
+        super().__init__(timeout=None)
+        self.key = key
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        st = DUEL_STATE.get(self.key)
+        if not st:
+            await interaction.response.send_message("⚠️ Duelo não encontrado (talvez já terminou).", ephemeral=True)
+            return False
+        uid = interaction.user.id
+        if uid not in (st.get("a"), st.get("b")):
+            await interaction.response.send_message("❌ Você não participa deste duelo.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Atacar", style=discord.ButtonStyle.danger)
+    async def atacar_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await duel_attack(interaction, use_buttons=True)
+
+    @discord.ui.button(label="Desistir", style=discord.ButtonStyle.secondary)
+    async def desistir_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        st = DUEL_STATE.get(self.key)
+        if not st:
+            await interaction.response.send_message("⚠️ Duelo não encontrado.", ephemeral=True)
+            return
+        uid = interaction.user.id
+        opp = st["b"] if uid == st["a"] else st["a"]
+        await end_duel(opp, uid, "Desistência", interaction)
+        # desabilita botões na mensagem atual (se possível)
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+        try:
+            await interaction.message.edit(view=self)
+        except Exception:
+            pass
+
+
 def duel_key(a: int, b: int) -> str:
     x, y = (a, b) if a < b else (b, a)
     return f"{x}:{y}"
+
+
+async def duel_attack(interaction: discord.Interaction, use_buttons: bool = False):
+    """Executa 1 ataque no duelo (d20 + ATK - DEF) e alterna turno. Usado por /atacar_duelo e botão."""
+    opp_id = ACTIVE_DUELS.get(interaction.user.id)
+    if not opp_id:
+        msg = "❌ Você não está em um duelo ativo. Use **/x1** para desafiar alguém."
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+        return
+
+    key = duel_key(interaction.user.id, opp_id)
+    st = DUEL_STATE.get(key)
+    if not st:
+        ACTIVE_DUELS.pop(interaction.user.id, None)
+        ACTIVE_DUELS.pop(opp_id, None)
+        msg = "⚠️ Estado do duelo perdido. Desafie novamente com **/x1**."
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+        return
+
+    if st.get("turn") != interaction.user.id:
+        msg = f"⏳ Não é seu turno. Turno de <@{st.get('turn')}>."
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+        return
+
+    p_atk = await get_player(interaction.user.id)
+    p_def = await get_player(opp_id)
+    if not p_atk or not p_def:
+        msg = "❌ Um dos jogadores não tem personagem. Use **/start**."
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+        return
+
+    d20 = random.randint(1, 20)
+    atk = await total_stat(p_atk, "atk")
+    def_opp = await total_stat(p_def, "defesa")
+
+    dano = max(0, int(d20) + int(atk) - int(def_opp))
+    p_def["hp"] = int(p_def.get("hp", 0)) - int(dano)
+    await save_player(p_def)
+
+    msg = (
+        f"⚔️ **Duelo X1**\n"
+        f"<@{interaction.user.id}> atacou <@{opp_id}>\n"
+        f"🎲 d20: **{d20}** | ⚔ ATK: **{atk}** | 🛡 DEF (alvo): **{def_opp}**\n"
+        f"💥 Dano: **{dano}**\n"
+        f"❤ HP do alvo: **{p_def['hp']}**\n"
+    )
+
+    if int(p_def["hp"]) <= 0:
+        await end_duel(interaction.user.id, opp_id, "KO (HP ≤ 0)", interaction)
+        return
+
+    st["turn"] = opp_id
+    DUEL_STATE[key] = st
+    msg += f"🔁 **Próximo turno:** <@{opp_id}>"
+
+    if use_buttons:
+        try:
+            await interaction.response.edit_message(content=msg, view=DuelView(key))
+        except Exception:
+            if interaction.response.is_done():
+                await interaction.followup.send(msg, ephemeral=False)
+            else:
+                await interaction.response.send_message(msg, ephemeral=False)
+    else:
+        await interaction.response.send_message(msg, ephemeral=False)
 
 async def end_duel(winner_id: int, loser_id: int, reason: str, interaction: discord.Interaction):
     """Encerra duelo, transfere 10% do gold do perdedor para o vencedor e limpa estados."""
@@ -2310,67 +2431,17 @@ async def aceitar_duelo(interaction: discord.Interaction):
         "created": now_ts(),
     }
 
-    await interaction.response.send_message(
+    key = duel_key(challenger_id, interaction.user.id)
+    msg = (
         f"✅ Duelo aceito! ⚔️ <@{challenger_id}> vs {interaction.user.mention}\n"
         f"🔁 **Turno inicial:** <@{challenger_id}>\n"
-        f"Para atacar use **/atacar_duelo** (um ataque por turno).",
-        ephemeral=False
+        f"Use os botões abaixo para **Atacar** ou **Desistir**. (Também existe /atacar_duelo como backup.)"
     )
+    await interaction.response.send_message(msg, view=DuelView(key), ephemeral=False)
+
 @tree.command(name="atacar_duelo", description="Atacar no duelo X1 (d20 + ATK - DEF).")
 async def atacar_duelo(interaction: discord.Interaction):
-    opp_id = ACTIVE_DUELS.get(interaction.user.id)
-    if not opp_id:
-        await interaction.response.send_message("❌ Você não está em um duelo ativo. Use **/x1** para desafiar alguém.", ephemeral=True)
-        return
-
-    key = duel_key(interaction.user.id, opp_id)
-    st = DUEL_STATE.get(key)
-    if not st:
-        # estado ausente — limpa e avisa
-        ACTIVE_DUELS.pop(interaction.user.id, None)
-        ACTIVE_DUELS.pop(opp_id, None)
-        await interaction.response.send_message("⚠️ Estado do duelo perdido. Desafie novamente com **/x1**.", ephemeral=True)
-        return
-
-    if st.get("turn") != interaction.user.id:
-        await interaction.response.send_message(f"⏳ Não é seu turno. Turno de <@{st.get('turn')}>.", ephemeral=True)
-        return
-
-    p_atk = await get_player(interaction.user.id)
-    p_def = await get_player(opp_id)
-    if not p_atk or not p_def:
-        await interaction.response.send_message("❌ Um dos jogadores não tem personagem. Use **/start**.", ephemeral=True)
-        return
-
-    # rolagem
-    d20 = random.randint(1, 20)
-    atk = await total_stat(p_atk, "atk")
-    def_opp = await total_stat(p_def, "defesa")
-
-    dano = max(0, int(d20) + int(atk) - int(def_opp))
-    p_def["hp"] = int(p_def.get("hp", 0)) - int(dano)
-
-    await save_player(p_def)
-
-    # resposta
-    await interaction.response.send_message(
-        f"⚔️ **Duelo X1**\n"
-        f"<@{interaction.user.id}> atacou <@{opp_id}>\n"
-        f"🎲 d20: **{d20}** | ⚔ ATK: **{atk}** | 🛡 DEF (alvo): **{def_opp}**\n"
-        f"💥 Dano: **{dano}**\n"
-        f"❤ HP do alvo: **{p_def['hp']}**",
-        ephemeral=False
-    )
-
-    # derrota?
-    if int(p_def["hp"]) <= 0:
-        # encerra: vencedor é atacante
-        await end_duel(interaction.user.id, opp_id, "KO (HP ≤ 0)", interaction)
-        return
-
-    # passa turno
-    st["turn"] = opp_id
-    DUEL_STATE[key] = st
+    await duel_attack(interaction)
 
 @tree.command(name="comandos", description="Lista resumida de comandos.")
 @only_channel(CANAL_COMANDOS_ID, "comandos-dos-players")
@@ -3938,9 +4009,17 @@ async def on_ready():
     await init_db()
     await seed_initial_data()
     try:
-        await tree.sync()
-    except Exception:
-        pass
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            # sincroniza rápido no servidor (ideal para testes / Railway)
+            tree.copy_global_to(guild=guild)
+            await tree.sync(guild=guild)
+        else:
+            # sync global pode demorar a aparecer no Discord
+            await tree.sync()
+    except Exception as e:
+        print("tree.sync falhou:", e)
+    print(f"👁️ VIGILLANT ONLINE: {client.user}")
     print(f"👁️ VIGILLANT ONLINE: {client.user}")
 
 # ==============================
