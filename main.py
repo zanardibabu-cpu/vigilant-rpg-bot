@@ -1002,6 +1002,30 @@ async def init_db():
             await db.execute("UPDATE items SET preco_base = preco WHERE preco_base = 0")
 
 
+
+        # migrations: ensure new columns exist on older DBs (players)
+        cur = await db.execute("PRAGMA table_info(players)")
+        pcols = [r[1] for r in await cur.fetchall()]
+        if "rest_until_ts" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN rest_until_ts INTEGER NOT NULL DEFAULT 0")
+        if "last_hunt_ts" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN last_hunt_ts INTEGER NOT NULL DEFAULT 0")
+        if "max_stamina" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN max_stamina INTEGER NOT NULL DEFAULT 0")
+            # best-effort backfill: keep max_stamina aligned with stamina when upgrading old DB
+            await db.execute("UPDATE players SET max_stamina = COALESCE(max_stamina, stamina)")
+        if "pontos" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN pontos INTEGER NOT NULL DEFAULT 0")
+        if "stats_json" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN stats_json TEXT NOT NULL DEFAULT '{}'") 
+        if "inventario_json" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN inventario_json TEXT NOT NULL DEFAULT '{}'") 
+        if "equipado_json" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN equipado_json TEXT NOT NULL DEFAULT '{}'") 
+        if "spellbook_json" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN spellbook_json TEXT NOT NULL DEFAULT '{}'") 
+
+
         await db.execute("CREATE INDEX IF NOT EXISTS idx_items_loja_ativo ON items(loja, ativo, deleted)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_items_tipo ON items(tipo, deleted)")
 
