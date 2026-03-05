@@ -374,8 +374,13 @@ class ShopView(discord.ui.View):
 @only_channel(CANAL_LOJA_ID, "loja")
 @app_commands.describe(loja="mercador|ferreiro|alfaiate|arcano|igreja|armaduras")
 async def loja_cmd(interaction: discord.Interaction, loja: str = "mercador"):
+    # Evita erro 10062 (Unknown interaction) quando DB/embeds demoram
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+
     p = await require_player(interaction)
     if not p:
+        await interaction.followup.send("❌ Use **/start** para criar seu personagem primeiro.", ephemeral=True)
         return
     if await blocked_by_rest(interaction, p):
         return
@@ -385,11 +390,12 @@ async def loja_cmd(interaction: discord.Interaction, loja: str = "mercador"):
         loja = "mercador"
 
     itens = await items_list_active(loja)
-    await interaction.response.send_message(
+    await interaction.followup.send(
         embed=build_shop_embed(loja, 0, itens),
         view=ShopView(interaction.user.id, loja, itens, 0),
         ephemeral=True
     )
+
 def parse_json_field(txt: str) -> Dict[str, Any]:
     txt = (txt or "").strip()
     if not txt:
@@ -4006,22 +4012,55 @@ async def mstatus(interaction: discord.Interaction, membro: discord.Member):
 
 @client.event
 async def on_ready():
-    await init_db()
-    await seed_initial_data()
+    # 1) Banco/migrações
+    try:
+        await init_db()
+    except Exception as e:
+        print("init_db falhou:", e)
+
+    # 2) Sincroniza comandos (faça isso MESMO se o seed falhar)
     try:
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
-            # sincroniza rápido no servidor (ideal para testes / Railway)
+            # Reset + sync rápido no servidor (ideal para testes / Railway)
+            tree.clear_commands(guild=guild)
             tree.copy_global_to(guild=guild)
             await tree.sync(guild=guild)
+            print(f"Synced commands to guild {GUILD_ID}")
         else:
             # sync global pode demorar a aparecer no Discord
             await tree.sync()
+            print("Synced global commands")
     except Exception as e:
         print("tree.sync falhou:", e)
+
+    # 3) Seed (não pode derrubar o bot)
+    try:
+        await seed_initial_data()
+    except Exception as e:
+        print("seed_initial_data falhou:", e)
+
     print(f"👁️ VIGILLANT ONLINE: {client.user}")
     print(f"👁️ VIGILLANT ONLINE: {client.user}")
 
+
+@tree.command(name="sync", description="(Mestre) Forçar sincronização dos comandos slash no servidor.")
+@only_master_channel()
+async def sync_cmd(interaction: discord.Interaction):
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+    try:
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            tree.clear_commands(guild=guild)
+            tree.copy_global_to(guild=guild)
+            synced = await tree.sync(guild=guild)
+            await interaction.followup.send(f"✅ Sync feito no servidor. Comandos: {len(synced)}", ephemeral=True)
+        else:
+            synced = await tree.sync()
+            await interaction.followup.send(f"✅ Sync global feito. Comandos: {len(synced)} (pode demorar a aparecer)", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Falha no sync: {e}", ephemeral=True)
 # ==============================
 # RUN
 # ==============================
@@ -4065,7 +4104,7 @@ async def on_ready():
 # LOJAS / CATÁLOGO (DB driven)
 # ==============================
 
-LOJAS_VALIDAS = {"mercador", "ferreiro", "alfaiate", "arcano", "igreja"}
+LOJAS_VALIDAS = {"mercador", "ferreiro", "alfaiate", "arcano", "igreja", "armaduras"}
 
 # Itens iniciais (catálogo) - você pode editar aqui no código pra ser mais rápido
 INITIAL_ITEMS: Dict[str, Dict[str, Any]] = {
