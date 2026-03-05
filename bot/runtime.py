@@ -1,4 +1,3 @@
-import re
 import os
 import time
 import json
@@ -8,6 +7,7 @@ import aiosqlite
 import discord
 from discord import app_commands
 from typing import Optional, List, Dict, Any, Tuple
+import re
 
 # CONFIG / IDs
 # ==========================
@@ -837,27 +837,6 @@ async def pick_drop_from_pool(pool: List[str]) -> Optional[Dict[str, Any]]:
 async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
         # items catalog
-                # players
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS players (
-            user_id INTEGER PRIMARY KEY,
-            classe TEXT NOT NULL,
-            level INTEGER NOT NULL,
-            xp INTEGER NOT NULL,
-            gold INTEGER NOT NULL,
-            pontos INTEGER NOT NULL,
-            hp INTEGER NOT NULL,
-            mana INTEGER NOT NULL,
-            stamina INTEGER NOT NULL,
-            max_stamina INTEGER NOT NULL,
-            rest_until_ts INTEGER NOT NULL DEFAULT 0,
-            last_hunt_ts INTEGER NOT NULL DEFAULT 0,
-            stats_json TEXT NOT NULL,
-            inventario_json TEXT NOT NULL,
-            equipado_json TEXT NOT NULL,
-            spellbook_json TEXT NOT NULL
-        )
-        """)
         await db.execute("""
         CREATE TABLE IF NOT EXISTS items (
             item_id TEXT PRIMARY KEY,
@@ -919,7 +898,30 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
 
-        await db.commit()
+        
+        # players
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS players (
+            user_id INTEGER PRIMARY KEY,
+            classe TEXT NOT NULL,
+            level INTEGER NOT NULL,
+            xp INTEGER NOT NULL,
+            gold INTEGER NOT NULL,
+            pontos INTEGER NOT NULL,
+            hp INTEGER NOT NULL,
+            mana INTEGER NOT NULL,
+            stamina INTEGER NOT NULL,
+            max_stamina INTEGER NOT NULL,
+            rest_until_ts INTEGER NOT NULL DEFAULT 0,
+            last_hunt_ts INTEGER NOT NULL DEFAULT 0,
+            stats_json TEXT NOT NULL,
+            inventario_json TEXT NOT NULL,
+            equipado_json TEXT NOT NULL,
+            spellbook_json TEXT NOT NULL
+        )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_players_user_id ON players(user_id)")
+await db.commit()
 
 # ==============================
 # LOJAS / CATÁLOGO (DB driven)
@@ -1781,4 +1783,3 @@ class BandidosView(discord.ui.View):
                 f"❤ HP agora: **{p['hp']}**",
                 ephemeral=False
             )
-
