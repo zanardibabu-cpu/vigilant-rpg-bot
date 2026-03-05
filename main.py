@@ -2058,16 +2058,6 @@ async def comandos(interaction: discord.Interaction):
     )
     await interaction.response.send_message(txt, ephemeral=True)
 
-# Loja
-@tree.command(name="loja", description="Ver itens ativos na loja (paginado).")
-@only_channel(CANAL_LOJA_ID, "loja")
-async def loja_cmd(interaction: discord.Interaction):
-    p = await require_player(interaction)
-    if not p:
-        return
-    if await blocked_by_rest(interaction, p):
-        return
-    await interaction.response.send_message(embed=await build_loja_embed(0), view=LojaView(interaction.user.id, 0), ephemeral=True)
 
 @tree.command(name="inventario", description="Ver seu inventário.")
 @only_channel(CANAL_LOJA_ID, "loja")
@@ -4768,16 +4758,6 @@ async def comandos(interaction: discord.Interaction):
     )
     await interaction.response.send_message(txt, ephemeral=True)
 
-# Loja
-@tree.command(name="loja", description="Ver itens ativos na loja (paginado).")
-@only_channel(CANAL_LOJA_ID, "loja")
-async def loja_cmd(interaction: discord.Interaction):
-    p = await require_player(interaction)
-    if not p:
-        return
-    if await blocked_by_rest(interaction, p):
-        return
-    await interaction.response.send_message(embed=await build_loja_embed(0), view=LojaView(interaction.user.id, 0), ephemeral=True)
 
 @tree.command(name="inventario", description="Ver seu inventário.")
 @only_channel(CANAL_LOJA_ID, "loja")
@@ -6443,38 +6423,3 @@ async def on_ready():
 # ==============================
 
 client.run(TOKEN)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
