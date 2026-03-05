@@ -406,17 +406,6 @@ def parse_json_list(txt: str) -> List[str]:
         return []
 
 
-    item_id="id unico ex: anel_fogo",
-    nome="nome exibido",
-    tipo="ex: anel/arma/armadura/cajado/livro/reliquia/consumivel",
-    slot="ex: anel/arma/armadura/cajado/especial/consumivel",
-    preco="preço em gold",
-    loja="mercador|ferreiro|alfaiate|arcano|igreja",
-    bonus_json='JSON dict ex: {"magia":2,"defesa":1}',
-    efeito_json='JSON dict ex: {"cura_bonus":2}',
-    classes_json='JSON list ex: ["mago","clerigo"]',
-    desc="descrição"
-)
 async def item_criar(
     interaction: discord.Interaction,
     item_id: str,
@@ -2734,9 +2723,7 @@ async def cacar(interaction: discord.Interaction):
 # ==============================
 
 
-    name="narracao",
-    description="(Mestre) Ativar/desativar modo narração (pausa /cacar e trava livro)."
-)
+@tree.command(name="narracao", description="(Mestre) Ativar/desativar modo narração (pausa /cacar e trava livro).")
 @only_master_channel()
 @app_commands.describe(modo="on ou off")
 async def narracao(interaction: discord.Interaction, modo: str):
@@ -2764,20 +2751,8 @@ async def list_all_player_ids() -> List[int]:
         rows = await cur.fetchall()
         return [int(r[0]) for r in rows]
 
-    membro="Jogador",
-    classe="clerigo | barbaro | arqueiro | mago | assassino | guerreiro",
-    nivel="Nível",
-    gold="Gold",
-    xp="XP",
-    atk="ATK (opcional)",
-    defesa="DEFESA (opcional)",
-    magia="MAGIA (opcional)",
-    sorte="SORTE (opcional)",
-    furtividade="FURTIVIDADE (opcional)",
-    destreza="DESTREZA (opcional)",
-    itens="Inventário CSV (ex: pocao_vida, anel_arcano)",
-    sobrescrever="sim para apagar e recriar do zero"
-)
+@tree.command(name="spawn", description="(Mestre) Criar/ajustar jogador rapidamente.")
+@only_master_channel()
 async def spawn(
     interaction: discord.Interaction,
     membro: discord.Member,
@@ -2861,10 +2836,8 @@ async def spawn(
     )
 
 
-    alvo="Mencione um jogador, ou digite 'all' ou 'todos_exceto'",
-    quantidade="Quantidade de XP",
-    exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
-)
+@tree.command(name="darxp", description="(Mestre) Dar XP para um jogador ou vários.")
+@only_master_channel()
 async def darxp(
     interaction: discord.Interaction,
     alvo: str,
@@ -2978,10 +2951,8 @@ async def darxp(
     )
 
 
-    alvo="Digite 'all' ou 'todos_exceto'",
-    quantidade="Quantidade de gold (pode ser negativo)",
-    exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
-)
+@tree.command(name="dargold", description="(Mestre) Dar/remover gold para um jogador ou vários.")
+@only_master_channel()
 async def dargold(interaction: discord.Interaction, alvo: str, quantidade: int, exceto: Optional[discord.Member] = None):
     alvo = (alvo or "").lower().strip()
 
@@ -3050,17 +3021,8 @@ async def daritem(interaction: discord.Interaction, membro: discord.Member, item
 
 # ---------- ITENS: criar/editar/excluir + loja + baú
 
-    spell_id="id unico ex: cura_maior",
-    nome="nome exibido",
-    custo_mana="custo em mana",
-    preco="preço em gold",
-    escola="arcano ou igreja",
-    efeito_tipo="dano|cura|buff|util",
-    efeito_valor="valor numérico",
-    tags_json='JSON list ex: ["cibernético","radiação"]',
-    classes_json='JSON list ex: ["mago"]',
-    desc="descrição"
-)
+@tree.command(name="spell_criar", description="(Mestre) Criar magia no catálogo.")
+@only_master_channel()
 async def spell_criar(
     interaction: discord.Interaction,
     spell_id: str,
@@ -4508,12 +4470,6 @@ class BandidosView(discord.ui.View):
 # ==============================
 
 
-    name="narracao",
-    description="(Mestre) Ativar/desativar modo narração (pausa /cacar e trava livro)."
-)
-@only_master_channel()
-@app_commands.describe(modo="on ou off")
-
 
 # ---------- DAR XP / GOLD (individual / all / todos_exceto)
 
@@ -4522,48 +4478,6 @@ async def list_all_player_ids() -> List[int]:
         cur = await db.execute("SELECT user_id FROM players")
         rows = await cur.fetchall()
         return [int(r[0]) for r in rows]
-
-    membro="Jogador",
-    classe="clerigo | barbaro | arqueiro | mago | assassino | guerreiro",
-    nivel="Nível",
-    gold="Gold",
-    xp="XP",
-    atk="ATK (opcional)",
-    defesa="DEFESA (opcional)",
-    magia="MAGIA (opcional)",
-    sorte="SORTE (opcional)",
-    furtividade="FURTIVIDADE (opcional)",
-    destreza="DESTREZA (opcional)",
-    itens="Inventário CSV (ex: pocao_vida, anel_arcano)",
-    sobrescrever="sim para apagar e recriar do zero"
-)
-
-
-    alvo="Mencione um jogador, ou digite 'all' ou 'todos_exceto'",
-    quantidade="Quantidade de XP",
-    exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
-)
-
-
-    alvo="Digite 'all' ou 'todos_exceto'",
-    quantidade="Quantidade de gold (pode ser negativo)",
-    exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
-)
-
-
-# ---------- ITENS: criar/editar/excluir + loja + baú
-
-    spell_id="id unico ex: cura_maior",
-    nome="nome exibido",
-    custo_mana="custo em mana",
-    preco="preço em gold",
-    escola="arcano ou igreja",
-    efeito_tipo="dano|cura|buff|util",
-    efeito_valor="valor numérico",
-    tags_json='JSON list ex: ["cibernético","radiação"]',
-    classes_json='JSON list ex: ["mago"]',
-    desc="descrição"
-)
 
 
 # [REMOVIDO DUPLICADO] command 'spell_ativar'
