@@ -12,6 +12,7 @@ import aiosqlite
 import discord
 from discord import app_commands
 from typing import Optional, List, Dict, Any, Tuple
+from utils import only_channel, only_master_channel
 
 # ==========================
 # DISCORD CLIENT / TREE
