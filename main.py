@@ -4374,8 +4374,8 @@ async def seed_initial_data():
             if exists:
                 continue
             await db.execute("""
-                INSERT INTO items (item_id, nome, preco_base, tipo, slot, bonus_json, efeito_json, classes_json, desc, deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                INSERT INTO items (item_id, nome, tipo, slot, preco, preco_base, bonus_json, efeito_json, classes_json, desc, loja, ativo, deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """, (
                 item_id,
                 it["nome"],
