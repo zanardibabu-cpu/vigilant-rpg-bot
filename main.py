@@ -405,9 +405,7 @@ def parse_json_list(txt: str) -> List[str]:
     except Exception:
         return []
 
-@tree.command(name="item_criar", description="(Mestre) Criar/atualizar item e escolher a loja.")
-@only_master_channel()
-@app_commands.describe(
+
     item_id="id unico ex: anel_fogo",
     nome="nome exibido",
     tipo="ex: anel/arma/armadura/cajado/livro/reliquia/consumivel",
@@ -2033,30 +2031,7 @@ async def comandos(interaction: discord.Interaction):
     await interaction.response.send_message(txt, ephemeral=True)
 
 # Loja
-@tree.command(name="loja", description="Ver itens ativos na loja (paginado).")
-@only_channel(CANAL_LOJA_ID, "loja")
-
-@tree.command(name="inventario", description="Ver seu inventário.")
-@only_channel(CANAL_LOJA_ID, "loja")
-async def inventario(interaction: discord.Interaction):
-    p = await require_player(interaction)
-    if not p:
-        return
-    inv = p.get("inventario") or []
-    if not inv:
-        await interaction.response.send_message("🎒 Inventário vazio.", ephemeral=True)
-        return
-
-    linhas = []
-    for item_id in inv[:60]:
-        it = await item_get(item_id)
-        if not it or int(it.get("deleted", 0)) == 1:
-            nm = f"{item_id} (REMOVIDO)"
-        else:
-            nm = it.get("nome", item_id)
-        linhas.append(f"• `{item_id}` — {nm}")
-
-    await interaction.response.send_message("🎒 **Seu inventário:**\n" + "\n".join(linhas), ephemeral=True)
+# [REMOVIDO DUPLICADO] command 'loja'
 
 @tree.command(name="comprar", description="Comprar item ativo da loja.")
 @only_channel(CANAL_LOJA_ID, "loja")
@@ -2758,7 +2733,7 @@ async def cacar(interaction: discord.Interaction):
 # COMANDOS — MESTRE
 # ==============================
 
-@tree.command(
+
     name="narracao",
     description="(Mestre) Ativar/desativar modo narração (pausa /cacar e trava livro)."
 )
@@ -2788,9 +2763,7 @@ async def list_all_player_ids() -> List[int]:
         cur = await db.execute("SELECT user_id FROM players")
         rows = await cur.fetchall()
         return [int(r[0]) for r in rows]
-@tree.command(name="spawn", description="(Mestre) Criar/Recriar personagem sem /start (classe, nível, stats e itens).")
-@only_master_channel()
-@app_commands.describe(
+
     membro="Jogador",
     classe="clerigo | barbaro | arqueiro | mago | assassino | guerreiro",
     nivel="Nível",
@@ -2887,9 +2860,7 @@ async def spawn(
         ephemeral=False
     )
 
-@tree.command(name="darxp", description="(Mestre) Dar XP (jogador | all | todos_exceto).")
-@only_master_channel()
-@app_commands.describe(
+
     alvo="Mencione um jogador, ou digite 'all' ou 'todos_exceto'",
     quantidade="Quantidade de XP",
     exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
@@ -3006,9 +2977,7 @@ async def darxp(
         ephemeral=False
     )
 
-@tree.command(name="dargold", description="(Mestre) Dar gold (jogador | all | todos_exceto).")
-@only_master_channel()
-@app_commands.describe(
+
     alvo="Digite 'all' ou 'todos_exceto'",
     quantidade="Quantidade de gold (pode ser negativo)",
     exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
@@ -3080,9 +3049,7 @@ async def daritem(interaction: discord.Interaction, membro: discord.Member, item
     await interaction.response.send_message(f"🎁 Mestre deu **{it['nome']}** x{quantidade} para {membro.mention}.", ephemeral=False)
 
 # ---------- ITENS: criar/editar/excluir + loja + baú
-@tree.command(name="spell_criar", description="(Mestre) Criar/atualizar feitiço.")
-@only_master_channel()
-@app_commands.describe(
+
     spell_id="id unico ex: cura_maior",
     nome="nome exibido",
     custo_mana="custo em mana",
@@ -3275,33 +3242,7 @@ async def purge_item_from_all_players(item_id: str) -> Tuple[int, int]:
 
     return inv_hits, eq_hits
 
-@tree.command(name="item_excluir", description="(Mestre) Excluir item do mundo inteiro (some de todo mundo).")
-@only_master_channel()
-
-@tree.command(name="loja_add", description="(Mestre) Ativar item na loja.")
-@only_master_channel()
-async def loja_add(interaction: discord.Interaction, item_id: str, preco: Optional[int] = None, estoque: Optional[int] = None):
-    iid = item_id.lower().strip()
-    it = await item_get(iid)
-    if not it or int(it.get("deleted", 0)) == 1:
-        await interaction.response.send_message("❌ Item não existe (ou foi removido).", ephemeral=True)
-        return
-    if preco is not None and preco < 0:
-        await interaction.response.send_message("❌ Preço inválido.", ephemeral=True)
-        return
-    if estoque is not None and estoque < 0:
-        await interaction.response.send_message("❌ Estoque inválido.", ephemeral=True)
-        return
-
-    async with aiosqlite.connect(DB_FILE) as db:
-        cur = await db.execute("SELECT 1 FROM shop_items WHERE item_id=?", (iid,))
-        if await cur.fetchone():
-            await db.execute("UPDATE shop_items SET ativo=1, preco=?, estoque=? WHERE item_id=?", (preco, estoque, iid))
-        else:
-            await db.execute("INSERT INTO shop_items (item_id, preco, estoque, ativo) VALUES (?, ?, ?, 1)", (iid, preco, estoque))
-        await db.commit()
-
-    await interaction.response.send_message(f"✅ Item ativado na loja: **{it['nome']}** (`{iid}`).", ephemeral=False)
+# [REMOVIDO DUPLICADO] command 'item_excluir'
 
 @tree.command(name="loja_remove", description="(Mestre) Desativar item da loja (não apaga do mundo).")
 @only_master_channel()
@@ -4543,86 +4484,30 @@ class BandidosView(discord.ui.View):
 # COMANDOS — JOGADOR
 # ==============================
 
-@tree.command(name="ping", description="Ver se o bot está vivo.")
-
-@tree.command(name="start", description="Criar personagem (menu de classes).")
-@only_channel(CANAL_BEM_VINDO_ID, "bem-vindo")
-
-@tree.command(name="perfil", description="Ver seu personagem.")
-
-@tree.command(name="comandos", description="Lista resumida de comandos.")
-@only_channel(CANAL_COMANDOS_ID, "comandos-dos-players")
 
 # Loja
-@tree.command(name="loja", description="Ver itens ativos na loja (paginado).")
-@only_channel(CANAL_LOJA_ID, "loja")
-
-@tree.command(name="inventario", description="Ver seu inventário.")
-@only_channel(CANAL_LOJA_ID, "loja")
-
-@tree.command(name="comprar", description="Comprar item ativo da loja.")
-@only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(item_id="ID do item")
-
-@tree.command(name="vender", description="Vender item do inventário (60% do preço base).")
-@only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(item_id="ID do item")
-
-@tree.command(name="equipar", description="Equipar item (usa o slot do item).")
-@only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(item_id="ID do item")
-
-@tree.command(name="desequipar", description="Desequipar um slot.")
-@only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(slot="arma|armadura|elmo|botas|luvas|cajado|especial|implante|livro_magias")
-
-@tree.command(name="desequiparanel", description="Desequipar um anel (posição 1 a 8).")
-@only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(posicao="1 a 8")
-
-@tree.command(name="usar", description="Usar consumível do inventário.")
-@only_channel(CANAL_LOJA_ID, "loja")
-@app_commands.describe(item_id="ID do item")
 
 # Upar atributos (SEM hp_base/mana_base e sem stamina)
-@tree.command(name="upar", description="Distribuir pontos pendentes em atributos.")
-@app_commands.describe(atributo="atk|defesa|magia|sorte|furtividade|destreza", quantidade="quantos pontos")
 
 # Trade
-@tree.command(name="enviargold", description="Enviar gold para outro jogador.")
-@app_commands.describe(membro="Quem recebe", quantidade="quanto enviar")
-
-@tree.command(name="doaritem", description="Doar item do inventário para outro jogador.")
-@app_commands.describe(membro="Quem recebe", item_id="ID do item")
 
 # Descansar / Albergue
-@tree.command(name="descansar", description="Descansar: 12h inativo, recupera stamina e garante HP/Mana mínimos.")
-
-@tree.command(name="albergue", description="Descanso pago: recupera HP/Mana/Stamina proporcional (até 50 gold).")
 
 # ==============================
 # MAGIAS (Jogador) — Livro de Magias
 # ==============================
 
-@tree.command(name="magias", description="Listar magias que você conhece.")
-
-@tree.command(name="livro_equipar", description="Equipar magia no livro (mago/clérigo).")
-@app_commands.describe(spell_id="ID da magia")
-
-@tree.command(name="livro_desequipar", description="Desequipar magia do livro (mago/clérigo).")
-@app_commands.describe(spell_id="ID da magia")
 
 # ==============================
 # /CACAR — D20 AUTOMÁTICO
 # ==============================
 
-@tree.command(name="cacar", description="Caçar nas terras da Diretriz.")
 
 # ==============================
 # COMANDOS — MESTRE
 # ==============================
 
-@tree.command(
+
     name="narracao",
     description="(Mestre) Ativar/desativar modo narração (pausa /cacar e trava livro)."
 )
@@ -4637,9 +4522,7 @@ async def list_all_player_ids() -> List[int]:
         cur = await db.execute("SELECT user_id FROM players")
         rows = await cur.fetchall()
         return [int(r[0]) for r in rows]
-@tree.command(name="spawn", description="(Mestre) Criar/Recriar personagem sem /start (classe, nível, stats e itens).")
-@only_master_channel()
-@app_commands.describe(
+
     membro="Jogador",
     classe="clerigo | barbaro | arqueiro | mago | assassino | guerreiro",
     nivel="Nível",
@@ -4655,32 +4538,21 @@ async def list_all_player_ids() -> List[int]:
     sobrescrever="sim para apagar e recriar do zero"
 )
 
-@tree.command(name="darxp", description="(Mestre) Dar XP (jogador | all | todos_exceto).")
-@only_master_channel()
-@app_commands.describe(
+
     alvo="Mencione um jogador, ou digite 'all' ou 'todos_exceto'",
     quantidade="Quantidade de XP",
     exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
 )
 
-@tree.command(name="dargold", description="(Mestre) Dar gold (jogador | all | todos_exceto).")
-@only_master_channel()
-@app_commands.describe(
+
     alvo="Digite 'all' ou 'todos_exceto'",
     quantidade="Quantidade de gold (pode ser negativo)",
     exceto="Se alvo for 'todos_exceto', informe o jogador a excluir"
 )
 
-@tree.command(name="dargold_individual", description="(Mestre) Dar/remover gold para 1 jogador.")
-@only_master_channel()
-
-@tree.command(name="daritem", description="(Mestre) Dar item (direto no inventário).")
-@only_master_channel()
 
 # ---------- ITENS: criar/editar/excluir + loja + baú
-@tree.command(name="spell_criar", description="(Mestre) Criar/atualizar feitiço.")
-@only_master_channel()
-@app_commands.describe(
+
     spell_id="id unico ex: cura_maior",
     nome="nome exibido",
     custo_mana="custo em mana",
@@ -4694,159 +4566,6 @@ async def list_all_player_ids() -> List[int]:
 )
 
 
-@tree.command(name="spell_ativar", description="(Mestre) Ativar feitiço na escola.")
-@only_master_channel()
+# [REMOVIDO DUPLICADO] command 'spell_ativar'
 
-
-@tree.command(name="spell_desativar", description="(Mestre) Desativar feitiço da escola.")
-@only_master_channel()
-
-
-@tree.command(name="spell_excluir", description="(Mestre) Excluir feitiço do mundo (deleted=1).")
-@only_master_channel()
-@tree.command(name="item_criar", description="(Mestre) Criar item no catálogo.")
-@only_master_channel()
-
-@tree.command(name="item_editar", description="(Mestre) Editar item do catálogo.")
-@only_master_channel()
-
-async def purge_item_from_all_players(item_id: str) -> Tuple[int, int]:
-    """
-    Remove item_id de inventários e de qualquer slot/anéis. Retorna (afetados_inventario, afetados_equipado)
-    """
-    inv_hits = 0
-    eq_hits = 0
-
-    async with aiosqlite.connect(DB_FILE) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT user_id, inventario_json, equipado_json FROM players")
-        rows = await cur.fetchall()
-
-        for r in rows:
-            uid = int(r["user_id"])
-            inv = jload(r["inventario_json"], [])
-            eq = ensure_equipado_format(jload(r["equipado_json"], {}))
-
-            changed = False
-
-            # inventário
-            before_len = len(inv)
-            inv = [x for x in inv if x != item_id]
-            if len(inv) != before_len:
-                inv_hits += 1
-                changed = True
-
-            # slots
-            for slot in ["arma","armadura","elmo","botas","luvas","cajado","especial","implante","livro_magias"]:
-                if eq.get(slot) == item_id:
-                    eq[slot] = None
-                    eq_hits += 1
-                    changed = True
-
-            # anéis
-            aneis = eq.get("aneis", [])
-            for i in range(len(aneis)):
-                if aneis[i] == item_id:
-                    aneis[i] = None
-                    eq_hits += 1
-                    changed = True
-            eq["aneis"] = aneis
-
-            if changed:
-                await db.execute(
-                    "UPDATE players SET inventario_json=?, equipado_json=? WHERE user_id=?",
-                    (jdump(inv), jdump(eq), uid)
-                )
-
-        await db.commit()
-
-    return inv_hits, eq_hits
-
-@tree.command(name="item_excluir", description="(Mestre) Excluir item do mundo inteiro (some de todo mundo).")
-@only_master_channel()
-
-@tree.command(name="loja_add", description="(Mestre) Ativar item na loja.")
-@only_master_channel()
-
-@tree.command(name="loja_remove", description="(Mestre) Desativar item da loja (não apaga do mundo).")
-@only_master_channel()
-
-@tree.command(name="loja_set", description="(Mestre) Ajustar preço/estoque de item ativo.")
-@only_master_channel()
-
-@tree.command(name="bau_add", description="(Mestre) Adicionar item ao Baú do Mestre.")
-@only_master_channel()
-
-@tree.command(name="bau_remove", description="(Mestre) Remover item do Baú do Mestre.")
-@only_master_channel()
-
-@tree.command(name="bau_listar", description="(Mestre) Listar itens no Baú do Mestre.")
-@only_master_channel()
-
-@tree.command(name="bau_dar", description="(Mestre) Dar item do Baú para um jogador.")
-@only_master_channel()
-
-# ---------- MAGIAS: criar/editar/excluir
-
-@tree.command(name="magia_criar", description="(Mestre) Criar magia no grimório.")
-@only_master_channel()
-
-@tree.command(name="magia_editar", description="(Mestre) Editar magia.")
-@only_master_channel()
-
-async def purge_spell_from_all_players(spell_id: str) -> int:
-    hits = 0
-    async with aiosqlite.connect(DB_FILE) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT user_id, spellbook_json FROM players")
-        rows = await cur.fetchall()
-        for r in rows:
-            uid = int(r["user_id"])
-            book = jload(r["spellbook_json"], [])
-            before = len(book)
-            book = [x for x in book if x != spell_id]
-            if len(book) != before:
-                hits += 1
-                await db.execute("UPDATE players SET spellbook_json=? WHERE user_id=?", (jdump(book), uid))
-        await db.commit()
-    return hits
-
-@tree.command(name="magia_excluir", description="(Mestre) Excluir magia do mundo (some do livro de todos).")
-@only_master_channel()
-
-# ---------- Outros comandos mestre utilitários
-
-@tree.command(name="resetar", description="(Mestre) Resetar personagem do jogador.")
-@only_master_channel()
-
-@tree.command(name="setlevel", description="(Mestre) Definir nível (não recalcula stats).")
-@only_master_channel()
-
-@tree.command(name="mdano", description="(Mestre) Aplicar dano manual em jogador.")
-@only_master_channel()
-
-@tree.command(name="mcurar", description="(Mestre) Curar manualmente jogador.")
-@only_master_channel()
-
-@tree.command(name="mstatus", description="(Mestre) Status rápido de um jogador.")
-@only_master_channel()
-
-# ==============================
-# READY
-# ==============================
-
-@client.event
-async def on_ready():
-    await init_db()
-    await seed_initial_data()
-    try:
-        await tree.sync()
-    except Exception:
-        pass
-    print(f"👁️ VIGILLANT ONLINE: {client.user}")
-
-# ==============================
-# RUN
-# ==============================
-
-client.run(TOKEN)
+# [REMOVIDO DUPLICADO] command 'magia_criar'
