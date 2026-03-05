@@ -26,7 +26,10 @@ CANAL_MESTRE_ID    = 1472274401289310248
 CANAL_CACAR_ID     = 1472365134801276998
 CANAL_TAVERNA_ID   = 0
 
-DB_FILE = "vigillant_rpg.sqlite"
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+DB_FILE = str(BASE_DIR / "vigilant_rpg.sqlite")
 
 # Gameplay
 STAMINA_MAX = 100
