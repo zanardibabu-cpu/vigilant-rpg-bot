@@ -406,6 +406,8 @@ def parse_json_list(txt: str) -> List[str]:
         return []
 
 
+@tree.command(name="item_criar", description="(Mestre) Criar item no catálogo.")
+@only_master_channel()
 async def item_criar(
     interaction: discord.Interaction,
     item_id: str,
@@ -2674,7 +2676,10 @@ async def cacar(interaction: discord.Interaction):
     m = MONSTROS[mob_id]
 
     d20 = rolar_d20()
-    dano = d20  # você pode adaptar para seu cálculo real
+    atk_player = await total_stat(p, "atk")
+    dano = int(d20) + max(0, int(atk_player))  # D20 + ATK total (base + equipamentos)
+    # Se quiser um dano mínimo garantido, descomente:
+    # dano = max(1, dano)
 
     defesa = 0
     dano_monstro = max(0, int(m["atk"]) - defesa)
@@ -3566,7 +3571,6 @@ async def on_ready():
 # RUN
 # ==============================
 
-client.run(TOKEN)
 
 
 
@@ -4504,3 +4508,9 @@ async def list_all_player_ids() -> List[int]:
 # [REMOVIDO DUPLICADO] command 'spell_ativar'
 
 # [REMOVIDO DUPLICADO] command 'magia_criar'
+
+# ==============================
+# RUN
+# ==============================
+
+client.run(TOKEN)
