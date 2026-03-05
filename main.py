@@ -5,10 +5,40 @@ import time
 import json
 import math
 import random
+import re
 import aiosqlite
 import discord
 from discord import app_commands
 from typing import Optional, List, Dict, Any, Tuple
+
+
+# ==============================
+# CHECKS (precisam vir antes dos @decorators)
+# ==============================
+
+def only_channel(channel_id: int, friendly: str):
+    async def predicate(interaction: discord.Interaction) -> bool:
+        if channel_id == 0:
+            return True
+        if interaction.channel_id != channel_id:
+            msg = f"❌ Este comando só pode ser usado em **#{friendly}**."
+            if interaction.response.is_done():
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(msg, ephemeral=True)
+            return False
+        return True
+    return app_commands.check(predicate)
+
+def only_master_channel():
+
+    async def predicate(interaction: discord.Interaction) -> bool:
+        if not interaction.user:
+            return False
+        return interaction.user.id == MESTRE_ID
+
+    return app_commands.check(predicate)
+
 
 # ==========================
 # DISCORD CLIENT / TREE
@@ -274,15 +304,7 @@ async def item_excluir(interaction: discord.Interaction, item_id: str):
 # Livro de magias
 SPELLBOOK_SLOTS = 7
 
-# ==============================
-# DISCORD
-# ==============================
-
-intents = discord.Intents.default()
-intents.members = True
-
-client = discord.Client(intents=intents)
-tree = app_commands.CommandTree(client)
+# (removed duplicate client/tree block)
 
 # ==============================
 # LORE / FALAS
@@ -792,28 +814,7 @@ def xp_para_upar(level: int) -> int:
 def clamp(n, a, b):
     return max(a, min(b, n))
 
-def only_channel(channel_id: int, friendly: str):
-    async def predicate(interaction: discord.Interaction) -> bool:
-        if channel_id == 0:
-            return True
-        if interaction.channel_id != channel_id:
-            msg = f"❌ Este comando só pode ser usado em **#{friendly}**."
-            if interaction.response.is_done():
-                await interaction.followup.send(msg, ephemeral=True)
-            else:
-                await interaction.response.send_message(msg, ephemeral=True)
-            return False
-        return True
-    return app_commands.check(predicate)
-
-def only_master_channel():
-
-    async def predicate(interaction: discord.Interaction) -> bool:
-        if not interaction.user:
-            return False
-        return interaction.user.id == MESTRE_ID
-
-    return app_commands.check(predicate)
+# (moved checks to top)
 
 async def blocked_by_rest(interaction: discord.Interaction, p: dict) -> bool:
     if now_ts() < int(p.get("rest_until_ts", 0)):
