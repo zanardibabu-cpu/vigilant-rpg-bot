@@ -3087,9 +3087,6 @@ async def spell_excluir(interaction: discord.Interaction, spell_id: str):
         await db.execute("UPDATE spells SET deleted=1, ativo=0 WHERE spell_id=?", (spell_id,))
         await db.commit()
     await interaction.response.send_message(f"🗑️ Feitiço `{spell_id}` removido do mundo.", ephemeral=True)
-@tree.command(name="item_criar", description="(Mestre) Criar item no catálogo.")
-@only_master_channel()
-
 @tree.command(name="item_editar", description="(Mestre) Editar item do catálogo.")
 @only_master_channel()
 async def item_editar(
