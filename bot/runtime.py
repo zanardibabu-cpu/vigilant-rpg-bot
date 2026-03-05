@@ -3,11 +3,12 @@ import time
 import json
 import math
 import random
+import re
 import aiosqlite
 import discord
 from discord import app_commands
 from typing import Optional, List, Dict, Any, Tuple
-import re
+from pathlib import Path
 
 # CONFIG / IDs
 # ==========================
@@ -26,8 +27,6 @@ CANAL_LOJA_ID      = 1472100628355350633
 CANAL_MESTRE_ID    = 1472274401289310248
 CANAL_CACAR_ID     = 1472365134801276998
 CANAL_TAVERNA_ID   = 0
-
-from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = str(BASE_DIR / "vigilant_rpg.sqlite")
@@ -834,6 +833,17 @@ async def pick_drop_from_pool(pool: List[str]) -> Optional[Dict[str, Any]]:
 
     return None
 
+
+# ==========================
+# DB MIGRATIONS (safe ALTER)
+# ==========================
+async def _ensure_column(db: aiosqlite.Connection, table: str, column: str, alter_ddl: str) -> None:
+    """Add a column if it doesn't exist (SQLite safe migration)."""
+    cur = await db.execute(f"PRAGMA table_info({table})")
+    cols = [row[1] for row in await cur.fetchall()]
+    if column not in cols:
+        await db.execute(alter_ddl)
+
 async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
         # items catalog
@@ -844,6 +854,7 @@ async def init_db():
             tipo TEXT NOT NULL,
             slot TEXT NOT NULL,
             preco INTEGER NOT NULL,
+            preco_base INTEGER NOT NULL DEFAULT 0,
             bonus_json TEXT NOT NULL,
             efeito_json TEXT NOT NULL,
             classes_json TEXT NOT NULL,
@@ -856,6 +867,16 @@ async def init_db():
 
         await db.execute("CREATE INDEX IF NOT EXISTS idx_items_loja_ativo ON items(loja, ativo, deleted)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_items_tipo ON items(tipo, deleted)")
+
+        # migrations: compat with older DBs
+        await _ensure_column(db, "items", "preco_base",
+                            "ALTER TABLE items ADD COLUMN preco_base INTEGER NOT NULL DEFAULT 0")
+        # backfill base price
+        try:
+            await db.execute("UPDATE items SET preco_base = preco WHERE preco_base = 0")
+        except Exception:
+            pass
+
 
         # shop
         await db.execute("""
@@ -898,7 +919,6 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
 
-        
         # players
         await db.execute("""
         CREATE TABLE IF NOT EXISTS players (
@@ -921,7 +941,8 @@ async def init_db():
         )
         """)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_players_user_id ON players(user_id)")
-await db.commit()
+
+        await db.commit()
 
 # ==============================
 # LOJAS / CATÁLOGO (DB driven)
