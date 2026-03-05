@@ -41,7 +41,12 @@ CANAL_CACAR_ID     = 1472365134801276998
 CANAL_TAVERNA_ID   = 0
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_FILE = str(BASE_DIR / "vigilant_rpg.sqlite")
+# Persistência no Railway: se você habilitar um Volume montado em /data, o banco fica permanente
+DATA_DIR = Path(os.getenv('DATA_DIR', '/data'))
+if DATA_DIR.exists() and DATA_DIR.is_dir():
+    DB_FILE = str(DATA_DIR / 'vigilant_rpg.sqlite')
+else:
+    DB_FILE = str(BASE_DIR / 'vigilant_rpg.sqlite')
 
 # Gameplay
 STAMINA_MAX = 100
@@ -1094,6 +1099,26 @@ async def init_db():
             spellbook_json TEXT NOT NULL
         )
         """)
+
+        # Migrações: adiciona colunas novas sem apagar dados (DB antigo)
+        cur = await db.execute("PRAGMA table_info(players)")
+        cols = {r[1] for r in await cur.fetchall()}
+        def addcol(name, ddl):
+            return (name not in cols, ddl)
+        migs = [
+            ("rest_until_ts", "ALTER TABLE players ADD COLUMN rest_until_ts INTEGER NOT NULL DEFAULT 0"),
+            ("last_hunt_ts", "ALTER TABLE players ADD COLUMN last_hunt_ts INTEGER NOT NULL DEFAULT 0"),
+            ("max_stamina", "ALTER TABLE players ADD COLUMN max_stamina INTEGER NOT NULL DEFAULT 100"),
+            ("stats_json", "ALTER TABLE players ADD COLUMN stats_json TEXT NOT NULL DEFAULT '{}'"),
+            ("inventario_json", "ALTER TABLE players ADD COLUMN inventario_json TEXT NOT NULL DEFAULT '[]'"),
+            ("equipado_json", "ALTER TABLE players ADD COLUMN equipado_json TEXT NOT NULL DEFAULT '{}'"),
+            ("spellbook_json", "ALTER TABLE players ADD COLUMN spellbook_json TEXT NOT NULL DEFAULT '[]'"),
+        ]
+        for name, ddl in migs:
+            if name not in cols:
+                await db.execute(ddl)
+
+
         await db.execute("CREATE INDEX IF NOT EXISTS idx_players_level ON players(level)")
         await db.commit()
 
@@ -2681,12 +2706,27 @@ async def cacar(interaction: discord.Interaction):
     # Se quiser um dano mínimo garantido, descomente:
     # dano = max(1, dano)
 
-    defesa = 0
-    dano_monstro = max(0, int(m["atk"]) - defesa)
+    defesa_player = await total_stat(p, 'defesa')
+    defesa_player = max(0, int(defesa_player or 0))
 
-    mob_hp = int(m["hp"]) - dano
+    # Defesa do inimigo (se não existir no dicionário, assume 0)
+    def_inimigo = int(m.get('defesa', m.get('def', 0)) or 0)
+
+    dano_apos_def = max(0, dano - def_inimigo)
+    dano_monstro = max(0, int(m['atk']) - defesa_player)
+
+    mob_hp = int(m['hp']) - dano_apos_def
     tomou = dano_monstro if mob_hp > 0 else 0
-    p["hp"] = max(0, int(p["hp"]) - tomou)
+    p['hp'] = int(p['hp']) - int(tomou)
+
+    morreu = (int(p['hp']) <= -1)
+    if morreu:
+        # Apaga o personagem: o jogador terá que criar outro no /start
+        async with aiosqlite.connect(DB_FILE) as db:
+            await db.execute('DELETE FROM players WHERE user_id=?', (interaction.user.id,))
+            await db.commit()
+        await interaction.response.send_message('☠️ Você caiu em batalha (HP ≤ -1). Seu personagem foi **apagado**. Use **/start** para criar um novo.', ephemeral=True)
+        return
 
     ganhou = (mob_hp <= 0 and dano > 0)
 
@@ -2717,10 +2757,11 @@ async def cacar(interaction: discord.Interaction):
         title="⚔️ CAÇADA — VIGILLANT",
         description=(
             f"👹 Alvo: **{m['nome']}**\n"
-            f"🎲 D20: **{d20}**\n\n"
-            f"⚔️ Dano causado: **{dano}**\n"
+            f"❤ Inimigo HP: **{max(0, mob_hp)}**/{int(m['hp'])} | 🛡️ DEF: **{def_inimigo}**\n"
+            f"🎲 D20: **{d20}** | ⚔️ Seu ATK: **{atk_player}** | 🛡️ Sua DEF: **{defesa_player}**\n\n"
+            f"⚔️ Dano causado (após DEF): **{max(0, int(m.get('hp')) - mob_hp)}**\n"
             f"💥 Dano recebido: **{tomou}**\n\n"
-            f"❤ HP: **{p['hp']}** | 🥵 Stamina: **{p['stamina']}/{p['max_stamina']}**"
+            f"❤ Seu HP: **{p['hp']}** | 🥵 Stamina: **{p['stamina']}/{p['max_stamina']}**"
         ),
         color=discord.Color.orange()
     )
