@@ -57,6 +57,10 @@ STAMINA_MAX = 100
 STAMINA_CUSTO_CACAR = 12
 CACAR_COOLDOWN_S = 35
 DESCANSO_HORAS = 12
+
+
+# Lojas válidas (definidas cedo para evitar NameError em runtime)
+LOJAS_VALIDAS = {"mercador", "ferreiro", "alfaiate", "arcano", "igreja", "armaduras"}
 ALBERGUE_MAX_CUSTO = 50
 
 # XP
@@ -643,589 +647,841 @@ NARRACAO_GUILD: Dict[int, bool] = {}
 # ==============================
 
 INITIAL_ITEMS = {
-    "espada_ferro": {
-        "nome": 'Espada de Ferro',
-        "preco": 400,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 4},
-        "efeito": {"forca": 1},
-        "classes": [],
-        "desc": 'Dano +4. Bônus: +1 força (conta como +1 ATK).',
-        "loja": 'ferreiro',
-    },
-    "espada_longa": {
-        "nome": 'Espada Longa',
-        "preco": 700,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 6},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Dano +6.',
-        "loja": 'ferreiro',
-    },
-    "espada_soldado": {
-        "nome": 'Espada do Soldado',
-        "preco": 1100,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 7, "defesa": 1},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Dano +7. +1 armadura (DEF).',
-        "loja": 'ferreiro',
-    },
-    "espada_runica": {
-        "nome": 'Espada Rúnica',
-        "preco": 1900,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 9, "magia": 2},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Dano +9. +2 inteligência (MAGIA).',
-        "loja": 'ferreiro',
-    },
-    "espada_crepusculo": {
-        "nome": 'Espada do Crepúsculo',
-        "preco": 2800,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 10},
-        "efeito": {"ignora_def": 2},
-        "classes": [],
-        "desc": 'Dano +10. Ignora 2 armadura do alvo.',
-        "loja": 'ferreiro',
-    },
-    "excalibur": {
-        "nome": 'Excalibur',
-        "preco": 9000,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 14},
-        "efeito": {"crit_pct": 5},
-        "classes": [],
-        "desc": 'Dano +14. 5% crítico.',
-        "loja": 'ferreiro',
-    },
-    "frostmourne": {
-        "nome": 'Frostmourne',
-        "preco": 15000,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 16},
-        "efeito": {"lifesteal": 2},
-        "classes": [],
-        "desc": 'Dano +16. Rouba 2 HP por ataque.',
-        "loja": 'ferreiro',
-    },
-    "machado_ferro": {
-        "nome": 'Machado de Ferro',
-        "preco": 450,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 5},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Dano +5.',
-        "loja": 'ferreiro',
-    },
-    "machado_guerra": {
-        "nome": 'Machado de Guerra',
-        "preco": 800,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 7},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Dano +7.',
-        "loja": 'ferreiro',
-    },
-    "machado_barbaro": {
-        "nome": 'Machado Bárbaro',
-        "preco": 1600,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 10},
-        "efeito": {"forca": 2},
-        "classes": [],
-        "desc": 'Dano +10. +2 força (ATK).',
-        "loja": 'ferreiro',
-    },
-    "machado_grom": {
-        "nome": 'Machado de Grom',
-        "preco": 4200,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 13},
-        "efeito": {"sangramento": 1},
-        "classes": [],
-        "desc": 'Dano +13. Causa sangramento.',
-        "loja": 'ferreiro',
-    },
-    "quebra_titas": {
-        "nome": 'Quebra-Titãs',
-        "preco": 7500,
-        "tipo": 'arma',
-        "slot": 'mao_direita',
-        "bonus": {"atk": 15},
-        "efeito": {"dano_vs_grande_mult": 2},
-        "classes": [],
-        "desc": 'Dano +15. Dano dobrado contra monstros grandes.',
-        "loja": 'ferreiro',
-    },
-    "arco_curto": {
-        "nome": 'Arco Curto',
-        "preco": 350,
-        "tipo": 'arma',
-        "slot": 'duas_maos',
-        "bonus": {"atk": 4, "destreza": 1},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Dano +4. +1 destreza.',
-        "loja": 'ferreiro',
-    },
-    "arco_longo": {
-        "nome": 'Arco Longo',
-        "preco": 650,
-        "tipo": 'arma',
-        "slot": 'duas_maos',
-        "bonus": {"atk": 6},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Dano +6.',
-        "loja": 'ferreiro',
-    },
-    "arco_elfico": {
-        "nome": 'Arco Élfico',
-        "preco": 1500,
-        "tipo": 'arma',
-        "slot": 'duas_maos',
-        "bonus": {"atk": 8, "destreza": 2},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Dano +8. +2 destreza.',
-        "loja": 'ferreiro',
-    },
-    "arco_cacador": {
-        "nome": 'Arco do Caçador',
-        "preco": 2600,
-        "tipo": 'arma',
-        "slot": 'duas_maos',
-        "bonus": {"atk": 9},
-        "efeito": {"crit_pct": 5},
-        "classes": [],
-        "desc": 'Dano +9. 5% crítico.',
-        "loja": 'ferreiro',
-    },
-    "arco_sombrio": {
-        "nome": 'Arco Sombrio',
-        "preco": 4800,
-        "tipo": 'arma',
-        "slot": 'duas_maos',
-        "bonus": {"atk": 12},
-        "efeito": {"bonus_vs_tag": {"radiação": 3}},
-        "classes": [],
-        "desc": 'Dano +12. +3 dano em criaturas irradiadas.',
-        "loja": 'ferreiro',
-    },
-    "cajado_simples": {
-        "nome": 'Cajado Simples',
-        "preco": 350,
-        "tipo": 'cajado',
-        "slot": 'duas_maos',
-        "bonus": {"mana": 3, "magia": 4},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Mana +3. Dano mágico +4 (MAGIA).',
-        "loja": 'arcano',
-    },
-    "cajado_arcano": {
-        "nome": 'Cajado Arcano',
-        "preco": 800,
-        "tipo": 'cajado',
-        "slot": 'duas_maos',
-        "bonus": {"mana": 6, "magia": 5},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Mana +6. Dano mágico +5.',
-        "loja": 'arcano',
-    },
-    "cajado_mago": {
-        "nome": 'Cajado do Mago',
-        "preco": 1600,
-        "tipo": 'cajado',
-        "slot": 'duas_maos',
-        "bonus": {"mana": 10, "magia": 2},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Mana +10. +2 inteligência (MAGIA).',
-        "loja": 'arcano',
-    },
-    "cajado_merlin": {
-        "nome": 'Cajado de Merlin',
-        "preco": 3500,
-        "tipo": 'cajado',
-        "slot": 'duas_maos',
-        "bonus": {"mana": 12},
-        "efeito": {"custo_mana_reducao": 1},
-        "classes": [],
-        "desc": 'Mana +12. Magias custam -1 mana.',
-        "loja": 'arcano',
-    },
-    "cajado_arquimago": {
-        "nome": 'Cajado do Arquimago',
-        "preco": 7000,
-        "tipo": 'cajado',
-        "slot": 'duas_maos',
-        "bonus": {"mana": 18},
-        "efeito": {"dup_magia_pct": 10},
-        "classes": [],
-        "desc": 'Mana +18. 10% chance de duplicar magia.',
-        "loja": 'arcano',
-    },
-    "armadura_couro": {
-        "nome": 'Armadura de Couro',
-        "preco": 450,
-        "tipo": 'armadura',
-        "slot": 'peitoral',
-        "bonus": {"defesa": 3},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Armadura +3.',
-        "loja": 'armaduras',
-    },
-    "armadura_ferro": {
-        "nome": 'Armadura de Ferro',
-        "preco": 900,
-        "tipo": 'armadura',
-        "slot": 'peitoral',
-        "bonus": {"defesa": 6},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Armadura +6.',
-        "loja": 'armaduras',
-    },
-    "armadura_reforcada": {
-        "nome": 'Armadura Reforçada',
-        "preco": 1600,
-        "tipo": 'armadura',
-        "slot": 'peitoral',
-        "bonus": {"defesa": 8, "hp": 5},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Armadura +8. HP +5.',
-        "loja": 'armaduras',
-    },
-    "armadura_mithril": {
-        "nome": 'Armadura de Mithril',
-        "preco": 4200,
-        "tipo": 'armadura',
-        "slot": 'peitoral',
-        "bonus": {"defesa": 10, "destreza": 2},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Armadura +10. +2 destreza.',
-        "loja": 'armaduras',
-    },
-    "armadura_guardiao": {
-        "nome": 'Armadura do Guardião',
-        "preco": 6800,
-        "tipo": 'armadura',
-        "slot": 'peitoral',
-        "bonus": {"defesa": 12, "hp": 10},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Armadura +12. HP +10.',
-        "loja": 'armaduras',
-    },
-    "manto_aprendiz": {
-        "nome": 'Manto do Aprendiz',
-        "preco": 600,
-        "tipo": 'manto',
-        "slot": 'peitoral',
-        "bonus": {"mana": 5},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Mana +5.',
-        "loja": 'arcano',
-    },
-    "manto_arcano": {
-        "nome": 'Manto Arcano',
-        "preco": 1100,
-        "tipo": 'manto',
-        "slot": 'peitoral',
-        "bonus": {"mana": 8, "magia": 1},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Mana +8. +1 inteligência (MAGIA).',
-        "loja": 'arcano',
-    },
-    "manto_clerigo": {
-        "nome": 'Manto do Clérigo',
-        "preco": 1300,
-        "tipo": 'manto',
-        "slot": 'peitoral',
-        "bonus": {"mana": 6},
-        "efeito": {"cura_bonus": 2},
-        "classes": [],
-        "desc": 'Mana +6. Cura +2.',
-        "loja": 'arcano',
-    },
-    "manto_estrelas": {
-        "nome": 'Manto das Estrelas',
-        "preco": 3200,
-        "tipo": 'manto',
-        "slot": 'peitoral',
-        "bonus": {"mana": 12},
-        "efeito": {"res_magica": 1},
-        "classes": [],
-        "desc": 'Mana +12. Resistência mágica.',
-        "loja": 'arcano',
-    },
-    "manto_arquimago": {
-        "nome": 'Manto do Arquimago',
-        "preco": 7500,
-        "tipo": 'manto',
-        "slot": 'peitoral',
-        "bonus": {"mana": 15},
-        "efeito": {"mana_regen": 1},
-        "classes": [],
-        "desc": 'Mana +15. Regenera 1 mana por turno.',
-        "loja": 'arcano',
-    },
-    "anel_mana": {
-        "nome": 'Anel de Mana',
-        "preco": 900,
-        "tipo": 'anel',
-        "slot": 'anel',
-        "bonus": {"mana": 6},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Mana +6.',
-        "loja": 'arcano',
-    },
-    "anel_vitalidade": {
-        "nome": 'Anel da Vitalidade',
-        "preco": 1000,
-        "tipo": 'anel',
-        "slot": 'anel',
-        "bonus": {"hp": 8},
-        "efeito": {},
-        "classes": [],
-        "desc": 'HP +8.',
-        "loja": 'arcano',
-    },
-    "anel_protecao": {
-        "nome": 'Anel da Proteção',
-        "preco": 1200,
-        "tipo": 'anel',
-        "slot": 'anel',
-        "bonus": {"defesa": 4},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Armadura +4.',
-        "loja": 'arcano',
-    },
-    "anel_arcano": {
-        "nome": 'Anel Arcano',
-        "preco": 2100,
-        "tipo": 'anel',
-        "slot": 'anel',
-        "bonus": {"mana": 8, "magia": 2},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Mana +8. Dano mágico +2.',
-        "loja": 'arcano',
-    },
-    "anel_poder": {
-        "nome": 'Anel do Poder',
-        "preco": 3500,
-        "tipo": 'anel',
-        "slot": 'anel',
-        "bonus": {"atk": 2},
-        "efeito": {},
-        "classes": [],
-        "desc": '+2 força (ATK).',
-        "loja": 'arcano',
-    },
-    "amuleto_vida": {
-        "nome": 'Amuleto da Vida',
-        "preco": 1600,
-        "tipo": 'amuleto',
-        "slot": 'amuleto',
-        "bonus": {"hp": 12},
-        "efeito": {},
-        "classes": [],
-        "desc": 'HP +12.',
-        "loja": 'igreja',
-    },
-    "amuleto_luz": {
-        "nome": 'Amuleto da Luz',
-        "preco": 2200,
-        "tipo": 'amuleto',
-        "slot": 'amuleto',
+    "pocao_vida": {
+        "nome": "Poção de Vida",
+        "preco": 200,
+        "tipo": "consumivel",
+        "slot": "consumivel",
+        "efeito": {"hp": 20},
         "bonus": {},
-        "efeito": {"cura_bonus": 3},
         "classes": [],
-        "desc": 'Cura +3.',
-        "loja": 'igreja',
-    },
-    "amuleto_arcano": {
-        "nome": 'Amuleto Arcano',
-        "preco": 2600,
-        "tipo": 'amuleto',
-        "slot": 'amuleto',
-        "bonus": {"mana": 10},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Mana +10.',
-        "loja": 'igreja',
-    },
-    "amuleto_guardiao": {
-        "nome": 'Amuleto do Guardião',
-        "preco": 3800,
-        "tipo": 'amuleto',
-        "slot": 'amuleto',
-        "bonus": {"defesa": 5, "hp": 6},
-        "efeito": {},
-        "classes": [],
-        "desc": 'Armadura +5. HP +6.',
-        "loja": 'igreja',
-    },
-    "pocao_cura": {
-        "nome": 'Poção de Cura',
-        "preco": 120,
-        "tipo": 'consumivel',
-        "slot": 'consumivel',
-        "bonus": {},
-        "efeito": {"cura_hp": 15},
-        "classes": [],
-        "desc": 'Cura 15 HP.',
-        "loja": 'mercador',
-    },
-    "pocao_cura_grande": {
-        "nome": 'Poção Grande de Cura',
-        "preco": 260,
-        "tipo": 'consumivel',
-        "slot": 'consumivel',
-        "bonus": {},
-        "efeito": {"cura_hp": 35},
-        "classes": [],
-        "desc": 'Cura 35 HP.',
-        "loja": 'mercador',
+        "desc": "Recupera 20 HP."
     },
     "pocao_mana": {
-        "nome": 'Poção de Mana',
-        "preco": 140,
-        "tipo": 'consumivel',
-        "slot": 'consumivel',
+        "nome": "Poção de Mana",
+        "preco": 200,
+        "tipo": "consumivel",
+        "slot": "consumivel",
+        "efeito": {"mana": 20},
         "bonus": {},
-        "efeito": {"cura_mana": 15},
         "classes": [],
-        "desc": 'Recupera 15 mana.',
-        "loja": 'mercador',
+        "desc": "Recupera 20 Mana."
     },
-    "pocao_arcana": {
-        "nome": 'Poção Arcana',
-        "preco": 320,
-        "tipo": 'consumivel',
-        "slot": 'consumivel',
+    "tablet_hacker": {
+        "nome": "Tablet Terminal Hacker",
+        "preco": 1900,
+        "tipo": "especial",
+        "slot": "especial",
+        "efeito": {"hack_stun_turns": 2},
         "bonus": {},
-        "efeito": {"cura_mana": 30},
-        "classes": [],
-        "desc": 'Recupera 30 mana.',
-        "loja": 'mercador',
+        "classes": ["mago", "clerigo"],
+        "desc": "Narrativa: hack desativa cibernéticos por 2 turnos."
     },
-    "relicario_neural": {
-        "nome": 'Relicário Neural',
-        "preco": 0,
-        "tipo": 'implante',
-        "slot": 'implante',
-        "bonus": {"mana": 5},
-        "efeito": {"cura_bonus": 2, "custo_mana_reducao": 1, "nao_compravel": 1},
-        "classes": [],
-        "desc": 'Implante: Mana +5, Cura +2. Cura custa -1 mana. (Não vendável/Comprável)',
-        "loja": 'arcano',
+
+    "anel_do_vigor": {
+        "nome": "Anel do Vigor",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 520,
+        "bonus": {"atk": 1},
+        "desc": "Um anel simples que fortalece o corpo do portador."
     },
-    "nucleo_energia_antigo": {
-        "nome": 'Núcleo de Energia Antigo',
-        "preco": 7000,
-        "tipo": 'especial',
-        "slot": 'especial',
-        "bonus": {"mana": 10},
-        "efeito": {"mana_regen": 1},
-        "classes": [],
-        "desc": 'Mana +10. Regenera 1 mana/turno.',
-        "loja": 'arcano',
+
+    "anel_da_guarda": {
+        "nome": "Anel da Guarda",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 560,
+        "bonus": {"defesa": 1},
+        "desc": "Gravado com runas antigas de proteção."
     },
-    "fragmento_ia": {
-        "nome": 'Fragmento de IA',
-        "preco": 12000,
-        "tipo": 'especial',
-        "slot": 'especial',
-        "bonus": {"magia": 4},
-        "efeito": {"prever_ataque_pct": 10},
-        "classes": [],
-        "desc": '+4 inteligência (MAGIA). Chance de prever ataque inimigo.',
-        "loja": 'arcano',
+
+    "anel_da_sabedoria": {
+        "nome": "Anel da Sabedoria",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 620,
+        "bonus": {"magia": 1},
+        "desc": "Um cristal antigo amplifica o poder arcano."
     },
-    "olho_vigilant": {
-        "nome": 'Olho do Vigilant',
-        "preco": 18000,
-        "tipo": 'especial',
-        "slot": 'especial',
-        "bonus": {},
-        "efeito": {"revela_ocultos": 1},
-        "classes": [],
-        "desc": 'Revela inimigos ocultos.',
-        "loja": 'arcano',
+
+    "anel_da_sombra": {
+        "nome": "Anel da Sombra",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 580,
+        "bonus": {"furtividade": 1},
+        "desc": "Usado por ladrões e exploradores das ruínas."
     },
-    "coracao_nuclear": {
-        "nome": 'Coração Nuclear',
-        "preco": 22000,
-        "tipo": 'especial',
-        "slot": 'especial',
-        "bonus": {"hp": 20},
-        "efeito": {"reduz_dano": 3},
+
+    "anel_da_agilidade": {
+        "nome": "Anel da Agilidade",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 580,
+        "bonus": {"destreza": 1},
+        "desc": "Leve como o vento, acelera os reflexos."
+    },
+
+    "anel_da_sorte_antiga": {
+        "nome": "Anel da Sorte Antiga",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 650,
+        "bonus": {"sorte": 1},
+        "desc": "Relíquia de um cassino pré-guerra."
+    },
+
+    "anel_de_aco_negro": {
+        "nome": "Anel de Aço Negro",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1050,
+        "bonus": {"defesa": 2},
+        "desc": "Forjado nas fornalhas de um ferreiro antigo."
+    },
+
+    "anel_arcano": {
+        "nome": "Anel Arcano",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1200,
+        "bonus": {"magia": 2},
+        "desc": "Amplifica feitiços de magos experientes."
+    },
+
+    "anel_do_cacador": {
+        "nome": "Anel do Caçador",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1150,
+        "bonus": {"atk": 2},
+        "desc": "Preferido pelos caçadores das zonas irradiadas."
+    },
+
+    "anel_da_luz_sagrada": {
+        "nome": "Anel da Luz Sagrada",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1350,
+        "bonus": {"magia": 2},
+        "desc": "Relíquia usada por clérigos nas antigas catedrais."
+    },
+
+    # ====== FERREIRO (armas) ======
+    "espada_aco": {
+        "nome": "Espada de Aço",
+        "preco": 650,
+        "tipo": "arma",
+        "slot": "arma",
+        "efeito": {},
+        "bonus": {"atk": 2},
+        "classes": ["barbaro", "executor"],
+        "loja": "ferreiro",
+        "desc": "Aço antigo retemperado. Confiável e letal."
+    },
+    "machado_sucata": {
+        "nome": "Machado de Sucata Reforçado",
+        "preco": 900,
+        "tipo": "arma",
+        "slot": "arma",
+        "efeito": {},
+        "bonus": {"atk": 3, "destreza": -1},
+        "classes": ["barbaro"],
+        "loja": "ferreiro",
+        "desc": "Pesado. Quando acerta, abre caminho."
+    },
+    "lamina_executor": {
+        "nome": "Lâmina do Executor",
+        "preco": 1450,
+        "tipo": "arma",
+        "slot": "arma",
+        "efeito": {},
+        "bonus": {"atk": 4, "sorte": 1},
+        "classes": ["executor"],
+        "loja": "ferreiro",
+        "desc": "Equilíbrio perfeito. Feita para terminar lutas rápido."
+    },
+
+    # ====== ARCANO (mago / clérigo) ======
+    "cajado_condutor": {
+        "nome": "Cajado Condutor",
+        "preco": 700,
+        "tipo": "arma",
+        "slot": "arma",
+        "efeito": {},
+        "bonus": {"magia": 2},
+        "classes": ["mago", "clerigo"],
+        "loja": "arcano",
+        "desc": "Canaliza energia residual do pré-guerra."
+    },
+    "grimorio_riscado": {
+        "nome": "Grimório Riscado",
+        "preco": 1200,
+        "tipo": "amuleto",
+        "slot": "amuleto",
+        "efeito": {},
+        "bonus": {"magia": 3, "sorte": 1},
+        "classes": ["mago"],
+        "loja": "arcano",
+        "desc": "Anotações em código. Aumenta sua precisão arcana."
+    },
+    "rosario_bento": {
+        "nome": "Rosário Bento",
+        "preco": 1100,
+        "tipo": "amuleto",
+        "slot": "amuleto",
+        "efeito": {},
+        "bonus": {"magia": 2, "defesa": 1},
+        "classes": ["clerigo"],
+        "loja": "arcano",
+        "desc": "Símbolo de fé. Protege e fortalece rituais."
+    },
+
+    # ====== ARMADURAS (loja dedicada) ======
+    "couraça_couro": {
+        "nome": "Couraça de Couro Remendada",
+        "preco": 550,
+        "tipo": "armadura",
+        "slot": "armadura",
+        "efeito": {},
+        "bonus": {"defesa": 2},
         "classes": [],
-        "desc": 'HP +20. Reduz dano recebido em 3.',
-        "loja": 'arcano',
+        "loja": "armaduras",
+        "desc": "Leve. Boa para começar sem morrer em 2 hits."
+    },
+    "armadura_malha": {
+        "nome": "Armadura de Malha",
+        "preco": 1200,
+        "tipo": "armadura",
+        "slot": "armadura",
+        "efeito": {},
+        "bonus": {"defesa": 4, "destreza": -1},
+        "classes": ["barbaro", "executor"],
+        "loja": "armaduras",
+        "desc": "Mais proteção, menos agilidade."
+    },
+    "manto_radioprotecao": {
+        "nome": "Manto de Radioproteção",
+        "preco": 1350,
+        "tipo": "armadura",
+        "slot": "armadura",
+        "efeito": {},
+        "bonus": {"defesa": 3, "magia": 1},
+        "classes": ["mago", "clerigo"],
+        "loja": "armaduras",
+        "desc": "Tecelagem com fibras tratadas. Ideal para conjuradores."
+    },
+
+}
+
+INITIAL_SHOP_ACTIVE = [
+    ("pocao_vida", None, None),
+    ("pocao_mana", None, None),
+    ("tablet_hacker", None, None),
+]
+
+# ==============================
+# FEITIÇOS / ESCOLA (DB)
+# ==============================
+
+ESCOLAS_SPELL = {"arcano", "igreja"}
+
+SPELLS_PER_PAGE = 7
+
+INITIAL_SPELLS: Dict[str, Dict[str, Any]] = {
+    # ====== ARCANO (mago) ======
+    "misseis_sucata": {
+        "nome": "Mísseis de Sucata",
+        "custo_mana": 6,
+        "preco": 420,
+        "escola": "arcano",
+        "efeito_tipo": "dano",
+        "efeito_valor": 12,
+        "tags": ["arcano", "metal"],
+        "classes": ["mago"],
+        "desc": "Projéteis improvisados de metal e energia. Dano moderado."
+    },
+    "pulso_ionico": {
+        "nome": "Pulso Iônico",
+        "custo_mana": 8,
+        "preco": 520,
+        "escola": "arcano",
+        "efeito_tipo": "util",
+        "efeito_valor": 2,
+        "tags": ["cibernético", "diretriz"],
+        "classes": ["mago"],
+        "desc": "Narrativa: interfere em sistemas cibernéticos por 2 turnos (stun/lock)."
+    },
+    "barreira_fractal": {
+        "nome": "Barreira Fractal",
+        "custo_mana": 7,
+        "preco": 480,
+        "escola": "arcano",
+        "efeito_tipo": "buff",
+        "efeito_valor": 2,
+        "tags": ["defesa", "arcano"],
+        "classes": ["mago"],
+        "desc": "Conjura proteção: +2 DEF (interpretação via total_stat/efeitos)."
+    },
+
+    # ====== IGREJA (clérigo) ======
+    "benção_do_aço": {
+        "nome": "Bênção do Aço",
+        "custo_mana": 6,
+        "preco": 430,
+        "escola": "igreja",
+        "efeito_tipo": "buff",
+        "efeito_valor": 2,
+        "tags": ["sagrado", "defesa"],
+        "classes": ["clerigo"],
+        "desc": "Benção protetora: +2 DEF (interpretação via efeitos)."
+    },
+    "cura_de_campo": {
+        "nome": "Cura de Campo",
+        "custo_mana": 8,
+        "preco": 560,
+        "escola": "igreja",
+        "efeito_tipo": "cura",
+        "efeito_valor": 14,
+        "tags": ["sagrado", "cura"],
+        "classes": ["clerigo"],
+        "desc": "Recupera 14 HP (cura direta)."
+    },
+    "exorcismo_ruidoso": {
+        "nome": "Exorcismo Ruidoso",
+        "custo_mana": 10,
+        "preco": 720,
+        "escola": "igreja",
+        "efeito_tipo": "dano",
+        "efeito_valor": 16,
+        "tags": ["sagrado", "demoníaco"],
+        "classes": ["clerigo"],
+        "desc": "Dano elevado contra entidades demoníacas (interpretação por tags)."
     },
 }
 
-# Todos os itens do catálogo ficam visíveis na loja (ativo=1). Não existe mais 'itens iniciais' limitando vitrine.
+INITIAL_SPELLS_ACTIVE = [
+    "misseis_sucata", "barreira_fractal",
+    "cura_de_campo", "benção_do_aço"
+]
 
 
-async def items_list_active(loja: str) -> List[Dict[str, Any]]:
-    loja = (loja or "mercador").lower().strip()
-    if loja not in LOJAS_VALIDAS:
-        loja = "mercador"
+async def spell_upsert(spell_id: str, s: Dict[str, Any]):
+    spell_id = spell_id.lower().strip()
+    escola = (s.get("escola") or "arcano").lower().strip()
+    if escola not in ESCOLAS_SPELL:
+        escola = "arcano"
+
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+        INSERT INTO spells(spell_id, nome, custo_mana, preco, escola, efeito_tipo, efeito_valor, tags_json, classes_json, desc, ativo, deleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+        ON CONFLICT(spell_id) DO UPDATE SET
+            nome=excluded.nome,
+            custo_mana=excluded.custo_mana,
+            preco=excluded.preco,
+            escola=excluded.escola,
+            efeito_tipo=excluded.efeito_tipo,
+            efeito_valor=excluded.efeito_valor,
+            tags_json=excluded.tags_json,
+            classes_json=excluded.classes_json,
+            desc=excluded.desc
+        """, (
+            spell_id,
+            s.get("nome", spell_id),
+            int(s.get("custo_mana", 0)),
+            int(s.get("preco", 0)),
+            escola,
+            s.get("efeito_tipo", "util"),
+            int(s.get("efeito_valor", 0)),
+            json.dumps(s.get("tags", []), ensure_ascii=False),
+            json.dumps(s.get("classes", []), ensure_ascii=False),
+            s.get("desc", "")
+        ))
+        await db.commit()
+
+
+async def spell_set_active(spell_id: str, ativo: bool):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("UPDATE spells SET ativo=? WHERE spell_id=? AND deleted=0", (1 if ativo else 0, spell_id.lower().strip()))
+        await db.commit()
+
+
+async def spell_get(spell_id: str) -> Optional[Dict[str, Any]]:
     async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            "SELECT * FROM items WHERE deleted=0 AND loja=? ORDER BY preco ASC, nome ASC",
-            (loja,)
-        )
+        cur = await db.execute("SELECT * FROM spells WHERE spell_id=?", (spell_id.lower().strip(),))
+        row = await cur.fetchone()
+        if not row:
+            return None
+        s = dict(row)
+        s["tags"] = json.loads(s.get("tags_json") or "[]")
+        s["classes"] = json.loads(s.get("classes_json") or "[]")
+        return s
+
+
+async def spell_list_active(escola: str, classe: Optional[str] = None) -> List[Dict[str, Any]]:
+    escola = (escola or "arcano").lower().strip()
+    if escola not in ESCOLAS_SPELL:
+        escola = "arcano"
+
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("""
+            SELECT * FROM spells
+            WHERE escola=? AND ativo=1 AND deleted=0
+            ORDER BY preco ASC, nome ASC
+        """, (escola,))
         rows = await cur.fetchall()
-    itens = []
-    for row in rows:
-        it = dict(row)
-        try:
-            it["bonus"] = json.loads(it.get("bonus_json") or "{}")
-        except Exception:
-            it["bonus"] = {}
-        try:
-            it["efeito"] = json.loads(it.get("efeito_json") or "{}")
-        except Exception:
-            it["efeito"] = {}
-        try:
-            it["classes"] = json.loads(it.get("classes_json") or "[]")
-        except Exception:
-            it["classes"] = []
-        itens.append(it)
-    return itens
+
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        s = dict(r)
+        s["tags"] = json.loads(s.get("tags_json") or "[]")
+        s["classes"] = json.loads(s.get("classes_json") or "[]")
+        if classe and classe not in s["classes"]:
+            continue
+        out.append(s)
+    return out
+
+
+async def seed_initial_spells():
+    for sid, s in INITIAL_SPELLS.items():
+        await spell_upsert(sid, s)
+    for sid in INITIAL_SPELLS_ACTIVE:
+        await spell_set_active(sid, True)
+
+
+def build_spellshop_embed(escola: str, page: int, spells: List[Dict[str, Any]]) -> discord.Embed:
+    total = len(spells)
+    total_pages = max(1, (total + SPELLS_PER_PAGE - 1) // SPELLS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+
+    start = page * SPELLS_PER_PAGE
+    end = start + SPELLS_PER_PAGE
+    chunk = spells[start:end]
+
+    titulo = "🔮 Escola Arcana — FEITIÇOS (ativos)" if escola == "arcano" else "⛪ Igreja — LITURGIAS (ativas)"
+
+    embed = discord.Embed(
+        title=titulo,
+        description=(
+            "Use **/aprender spell_id** para comprar e aprender.\n"
+            "Depois equipe com **/livro_equipar spell_id** (fora de narração).\n"
+        ),
+        color=discord.Color.purple()
+    )
+
+    for s in chunk:
+        sid = s["spell_id"]
+        preco = int(s["preco"])
+        mana = int(s["custo_mana"])
+        et = s.get("efeito_tipo", "util")
+        ev = int(s.get("efeito_valor", 0))
+        classes = ", ".join(s.get("classes", [])) or "—"
+        desc = (s.get("desc") or "").strip()
+        if desc:
+            desc = desc[:90] + ("…" if len(desc) > 90 else "")
+
+        embed.add_field(
+            name=f"**{s['nome']}** (`{sid}`)",
+            value=(
+                f"💰 **{preco}** | 🔵 Mana **{mana}**\n"
+                f"✨ {et.upper()} {ev} | 🎭 {classes}\n"
+                f"_{desc}_" if desc else f"✨ {et.upper()} {ev} | 🎭 {classes}"
+            ),
+            inline=False
+        )
+
+    embed.set_footer(text=f"Escola: {escola} • Página {page+1}/{total_pages} • Feitiços {start+1}-{min(end,total)} de {total}")
+    return embed
+
+
+class SpellShopView(discord.ui.View):
+    def __init__(self, user_id: int, escola: str, spells: List[Dict[str, Any]], page: int = 0):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.escola = escola
+        self.spells = spells
+        self.page = page
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.user_id
+
+    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page -= 1
+        await interaction.response.edit_message(embed=build_spellshop_embed(self.escola, self.page, self.spells), view=self)
+
+    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page += 1
+        await interaction.response.edit_message(embed=build_spellshop_embed(self.escola, self.page, self.spells), view=self)
+
+    @discord.ui.button(label="Fechar", style=discord.ButtonStyle.danger)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="✅ Escola fechada.", embed=None, view=None)
+async def init_db():
+    async with aiosqlite.connect(DB_FILE) as db:
+        # items catalog
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS items (
+            item_id TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            slot TEXT NOT NULL,
+            preco INTEGER NOT NULL,
+            preco_base INTEGER NOT NULL DEFAULT 0,
+            bonus_json TEXT NOT NULL,
+            efeito_json TEXT NOT NULL,
+            classes_json TEXT NOT NULL,
+            desc TEXT NOT NULL,
+            loja TEXT NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 0,
+            deleted INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+
+        # migrations: ensure new columns exist on older DBs
+        cur = await db.execute("PRAGMA table_info(items)")
+        cols = [r[1] for r in await cur.fetchall()]
+        if "preco_base" not in cols:
+            await db.execute("ALTER TABLE items ADD COLUMN preco_base INTEGER NOT NULL DEFAULT 0")
+            await db.execute("UPDATE items SET preco_base = preco WHERE preco_base = 0")
+
+
+
+        # migrations: ensure new columns exist on older DBs (players)
+        cur = await db.execute("PRAGMA table_info(players)")
+        pcols = [r[1] for r in await cur.fetchall()]
+        if "rest_until_ts" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN rest_until_ts INTEGER NOT NULL DEFAULT 0")
+        if "last_hunt_ts" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN last_hunt_ts INTEGER NOT NULL DEFAULT 0")
+        if "max_stamina" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN max_stamina INTEGER NOT NULL DEFAULT 0")
+            # best-effort backfill: keep max_stamina aligned with stamina when upgrading old DB
+            await db.execute("UPDATE players SET max_stamina = COALESCE(max_stamina, stamina)")
+        if "pontos" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN pontos INTEGER NOT NULL DEFAULT 0")
+        if "stats_json" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN stats_json TEXT NOT NULL DEFAULT '{}'") 
+        if "inventario_json" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN inventario_json TEXT NOT NULL DEFAULT '{}'") 
+        if "equipado_json" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN equipado_json TEXT NOT NULL DEFAULT '{}'") 
+        if "spellbook_json" not in pcols:
+            await db.execute("ALTER TABLE players ADD COLUMN spellbook_json TEXT NOT NULL DEFAULT '{}'") 
+
+
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_items_loja_ativo ON items(loja, ativo, deleted)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_items_tipo ON items(tipo, deleted)")
+
+        # shop
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS shop_items (
+            item_id TEXT PRIMARY KEY,
+            preco INTEGER,
+            estoque INTEGER,
+            ativo INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY(item_id) REFERENCES items(item_id)
+        )
+        """)
+
+        # master chest
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS master_chest (
+            item_id TEXT PRIMARY KEY,
+            qtd INTEGER NOT NULL,
+            FOREIGN KEY(item_id) REFERENCES items(item_id)
+        )
+        """)
+
+        # spells catalog
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS spells (
+            spell_id TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            custo_mana INTEGER NOT NULL,
+            preco INTEGER NOT NULL,
+            escola TEXT NOT NULL,              -- "arcano" ou "igreja"
+            efeito_tipo TEXT NOT NULL,         -- "dano", "cura", "buff", "util"
+            efeito_valor INTEGER NOT NULL,     -- número (ex: 12)
+            tags_json TEXT NOT NULL,           -- ["cibernetico","radiação"...]
+            classes_json TEXT NOT NULL,        -- ["mago"] etc
+            desc TEXT NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 0,
+            deleted INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_escola_ativo ON spells(escola, ativo, deleted)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_spells_classes ON spells(deleted)")
+
+
+        # players
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS players (
+            user_id INTEGER PRIMARY KEY,
+            classe TEXT NOT NULL,
+            level INTEGER NOT NULL,
+            xp INTEGER NOT NULL,
+            gold INTEGER NOT NULL,
+            pontos INTEGER NOT NULL,
+            hp INTEGER NOT NULL,
+            mana INTEGER NOT NULL,
+            stamina INTEGER NOT NULL,
+            max_stamina INTEGER NOT NULL,
+            rest_until_ts INTEGER NOT NULL DEFAULT 0,
+            last_hunt_ts INTEGER NOT NULL DEFAULT 0,
+            stats_json TEXT NOT NULL,
+            inventario_json TEXT NOT NULL,
+            equipado_json TEXT NOT NULL,
+            spellbook_json TEXT NOT NULL
+        )
+        """)
+
+        # Migrações: adiciona colunas novas sem apagar dados (DB antigo)
+        cur = await db.execute("PRAGMA table_info(players)")
+        cols = {r[1] for r in await cur.fetchall()}
+        def addcol(name, ddl):
+            return (name not in cols, ddl)
+        migs = [
+            ("rest_until_ts", "ALTER TABLE players ADD COLUMN rest_until_ts INTEGER NOT NULL DEFAULT 0"),
+            ("last_hunt_ts", "ALTER TABLE players ADD COLUMN last_hunt_ts INTEGER NOT NULL DEFAULT 0"),
+            ("max_stamina", "ALTER TABLE players ADD COLUMN max_stamina INTEGER NOT NULL DEFAULT 100"),
+            ("stats_json", "ALTER TABLE players ADD COLUMN stats_json TEXT NOT NULL DEFAULT '{}'"),
+            ("inventario_json", "ALTER TABLE players ADD COLUMN inventario_json TEXT NOT NULL DEFAULT '[]'"),
+            ("equipado_json", "ALTER TABLE players ADD COLUMN equipado_json TEXT NOT NULL DEFAULT '{}'"),
+            ("spellbook_json", "ALTER TABLE players ADD COLUMN spellbook_json TEXT NOT NULL DEFAULT '[]'"),
+        ]
+        for name, ddl in migs:
+            if name not in cols:
+                await db.execute(ddl)
+
+
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_players_level ON players(level)")
+        await db.commit()
+
+# ==============================
+# LOJAS / CATÁLOGO (DB driven)
+# ==============================
+
+LOJAS_VALIDAS = {"mercador", "ferreiro", "alfaiate", "arcano", "igreja", "armaduras"}
+
+# Itens iniciais (catálogo) - você pode editar aqui no código pra ser mais rápido
+INITIAL_ITEMS: Dict[str, Dict[str, Any]] = {
+    # ===== CONSUMÍVEIS (Mercador) =====
+    "pocao_vida": {
+        "nome": "Poção de Vida",
+        "preco": 200,
+        "tipo": "consumivel",
+        "slot": "consumivel",
+        "efeito": {"hp": 20},
+        "bonus": {},
+        "classes": [],
+        "desc": "Recupera 20 HP.",
+        "loja": "mercador",
+    },
+    "pocao_mana": {
+        "nome": "Poção de Mana",
+        "preco": 200,
+        "tipo": "consumivel",
+        "slot": "consumivel",
+        "efeito": {"mana": 20},
+        "bonus": {},
+        "classes": [],
+        "desc": "Recupera 20 Mana.",
+        "loja": "mercador",
+    },
+
+    # ===== ESPECIAIS (Mercador) =====
+    "tablet_hacker": {
+        "nome": "Tablet Terminal Hacker",
+        "preco": 1900,
+        "tipo": "especial",
+        "slot": "especial",
+        "efeito": {"hack_stun_turns": 2},
+        "bonus": {},
+        "classes": ["mago", "clerigo"],
+        "desc": "Narrativa: hack desativa cibernéticos por 2 turnos.",
+        "loja": "mercador",
+    },
+
+    # ===== ANÉIS (Ferreiro) =====
+    "anel_do_vigor": {
+        "nome": "Anel do Vigor",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 520,
+        "bonus": {"atk": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Um anel simples que fortalece o corpo do portador.",
+        "loja": "ferreiro",
+    },
+    "anel_da_guarda": {
+        "nome": "Anel da Guarda",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 560,
+        "bonus": {"defesa": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Gravado com runas antigas de proteção.",
+        "loja": "ferreiro",
+    },
+    "anel_da_sabedoria": {
+        "nome": "Anel da Sabedoria",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 620,
+        "bonus": {"magia": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Um cristal antigo amplifica o poder arcano.",
+        "loja": "arcano",
+    },
+    "anel_da_sombra": {
+        "nome": "Anel da Sombra",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 580,
+        "bonus": {"furtividade": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Usado por ladrões e exploradores das ruínas.",
+        "loja": "ferreiro",
+    },
+    "anel_da_agilidade": {
+        "nome": "Anel da Agilidade",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 580,
+        "bonus": {"destreza": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Leve como o vento, acelera os reflexos.",
+        "loja": "alfaiate",
+    },
+    "anel_da_sorte_antiga": {
+        "nome": "Anel da Sorte Antiga",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 650,
+        "bonus": {"sorte": 1},
+        "efeito": {},
+        "classes": [],
+        "desc": "Relíquia de um cassino pré-guerra.",
+        "loja": "mercador",
+    },
+    "anel_de_aco_negro": {
+        "nome": "Anel de Aço Negro",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1050,
+        "bonus": {"defesa": 2},
+        "efeito": {},
+        "classes": [],
+        "desc": "Forjado nas fornalhas de um ferreiro antigo.",
+        "loja": "ferreiro",
+    },
+    "anel_arcano": {
+        "nome": "Anel Arcano",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1200,
+        "bonus": {"magia": 2},
+        "efeito": {},
+        "classes": ["mago"],
+        "desc": "Amplifica feitiços de magos experientes.",
+        "loja": "arcano",
+    },
+    "anel_do_cacador": {
+        "nome": "Anel do Caçador",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1150,
+        "bonus": {"atk": 2},
+        "efeito": {},
+        "classes": ["arqueiro", "assassino"],
+        "desc": "Preferido pelos caçadores das zonas irradiadas.",
+        "loja": "ferreiro",
+    },
+    "anel_da_luz_sagrada": {
+        "nome": "Anel da Luz Sagrada",
+        "tipo": "anel",
+        "slot": "anel",
+        "preco": 1350,
+        "bonus": {"magia": 2},
+        "efeito": {"cura_bonus": 1},
+        "classes": ["clerigo"],
+        "desc": "Relíquia usada por clérigos nas antigas catedrais.",
+        "loja": "igreja",
+    },
+
+    # ===== ITENS ARCANOS (Arcano) =====
+    "cajado_serpente": {
+        "nome": "Cajado da Serpente",
+        "preco": 340,
+        "tipo": "cajado",
+        "slot": "cajado",
+        "bonus": {"magia": 2},
+        "efeito": {},
+        "classes": ["mago", "clerigo"],
+        "desc": "+2 MAGIA.",
+        "loja": "arcano",
+    },
+    "grimorio_fissura": {
+        "nome": "Grimório da Fissura",
+        "preco": 900,
+        "tipo": "livro",
+        "slot": "especial",
+        "bonus": {"magia": 2},
+        "efeito": {"mana": 5},
+        "classes": ["mago"],
+        "desc": "Um tomo pré-guerra que aumenta o foco arcano. +2 MAGIA, +5 Mana máx (efeito).",
+        "loja": "arcano",
+    },
+
+    # ===== IGREJA (Igreja) =====
+    "sino_do_juizo": {
+        "nome": "Sino do Juízo",
+        "preco": 850,
+        "tipo": "reliquia",
+        "slot": "especial",
+        "bonus": {"defesa": 1},
+        "efeito": {"cura_bonus": 2},
+        "classes": ["clerigo"],
+        "desc": "Ressoa contra o caos. +2 cura (efeito), +1 DEF.",
+        "loja": "igreja",
+    },
+    "livro_hinos": {
+        "nome": "Livro de Hinos",
+        "preco": 500,
+        "tipo": "livro",
+        "slot": "especial",
+        "bonus": {"magia": 1},
+        "efeito": {"cura_bonus": 1},
+        "classes": ["clerigo"],
+        "desc": "Cantos antigos amplificam bençãos. +1 MAGIA, +1 cura.",
+        "loja": "igreja",
+    },
+}
+
+# Quais itens começam "ativos" na vitrine (o resto existe, mas fica desativado até você ativar)
+INITIAL_ACTIVE_IDS = [
+    "pocao_vida", "pocao_mana", "tablet_hacker",
+    # Novas lojas
+    "espada_aco", "machado_sucata", "lamina_executor",
+    "cajado_condutor", "grimorio_riscado", "rosario_bento",
+    "couraça_couro", "armadura_malha", "manto_radioprotecao",
+    # Anéis (ativos pra já aparecer)
+    "anel_do_vigor", "anel_da_guarda", "anel_da_sabedoria", "anel_da_sorte_antiga",
+    # Arcano/Igreja
+    "cajado_serpente", "livro_hinos"
+]
 
 
 async def item_upsert(item_id: str, it: Dict[str, Any]):
@@ -1236,7 +1492,7 @@ async def item_upsert(item_id: str, it: Dict[str, Any]):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         INSERT INTO items(item_id, nome, tipo, slot, preco, bonus_json, efeito_json, classes_json, desc, loja, ativo, deleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
         ON CONFLICT(item_id) DO UPDATE SET
             nome=excluded.nome,
             tipo=excluded.tipo,
@@ -1246,8 +1502,7 @@ async def item_upsert(item_id: str, it: Dict[str, Any]):
             efeito_json=excluded.efeito_json,
             classes_json=excluded.classes_json,
             desc=excluded.desc,
-            loja=excluded.loja,
-            ativo=1
+            loja=excluded.loja
         """, (
             item_id,
             it.get("nome", item_id),
@@ -1282,9 +1537,59 @@ async def item_get(item_id: str) -> Optional[Dict[str, Any]]:
         it["classes"] = json.loads(it.get("classes_json") or "[]")
         return it
 
+
 async def seed_initial_data():
-    """Garante que o catálogo padrão exista no banco (idempotente)."""
-    await seed_initial_items()
+    """
+    Garante que todo o catálogo padrão exista no banco e fique visível nas lojas.
+    """
+    async with aiosqlite.connect(DB_FILE) as db:
+        for item_id, it in INITIAL_ITEMS.items():
+            loja = (it.get("loja") or "mercador").lower().strip()
+            if loja not in LOJAS_VALIDAS:
+                loja = "mercador"
+            await db.execute("""
+                INSERT INTO items (
+                    item_id, nome, tipo, slot, preco, preco_base,
+                    bonus_json, efeito_json, classes_json, desc, loja, ativo, deleted
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+                ON CONFLICT(item_id) DO UPDATE SET
+                    nome=excluded.nome,
+                    tipo=excluded.tipo,
+                    slot=excluded.slot,
+                    preco=excluded.preco,
+                    preco_base=excluded.preco_base,
+                    bonus_json=excluded.bonus_json,
+                    efeito_json=excluded.efeito_json,
+                    classes_json=excluded.classes_json,
+                    desc=excluded.desc,
+                    loja=excluded.loja,
+                    ativo=1,
+                    deleted=0
+            """, (
+                item_id,
+                it.get("nome", item_id),
+                it.get("tipo", "especial"),
+                it.get("slot", it.get("tipo", "especial")),
+                int(it.get("preco", 0)),
+                int(it.get("preco", 0)),
+                jdump(it.get("bonus", {})),
+                jdump(it.get("efeito", {})),
+                jdump(it.get("classes", [])),
+                it.get("desc", "") or "",
+                loja,
+            ))
+
+            # shop_items como espelho visível de tudo, com estoque infinito (NULL)
+            await db.execute("""
+                INSERT INTO shop_items (item_id, preco, estoque, ativo)
+                VALUES (?, ?, NULL, 1)
+                ON CONFLICT(item_id) DO UPDATE SET
+                    preco=excluded.preco,
+                    ativo=1
+            """, (item_id, int(it.get("preco", 0))))
+
+        await db.commit()
 
 # ==============================
 # PLAYER CRUD
@@ -1393,20 +1698,22 @@ async def item_exists_active(item_id: str) -> bool:
     it = await item_get(item_id)
     return bool(it) and int(it.get("deleted", 0)) == 0
 
+
 async def shop_list_active() -> List[dict]:
     async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("""
-            SELECT i.*, s.preco as preco_loja, s.estoque, s.ativo
-            FROM shop_items s
-            JOIN items i ON i.item_id = s.item_id
-            WHERE s.ativo=1 AND i.deleted=0
-            ORDER BY i.nome COLLATE NOCASE
+            SELECT * FROM items
+            WHERE deleted=0
+            ORDER BY nome COLLATE NOCASE
         """)
         rows = await cur.fetchall()
         out = []
         for r in rows:
             it = dict(r)
+            it["preco_loja"] = int(it.get("preco", 0))
+            it["estoque"] = None
+            it["ativo"] = 1
             it["bonus"] = jload(it.get("bonus_json"), {})
             it["efeito"] = jload(it.get("efeito_json"), {})
             it["classes"] = jload(it.get("classes_json"), [])
@@ -1419,35 +1726,15 @@ def shop_price(it: dict) -> int:
         return int(it.get("preco_base", 0))
     return int(p)
 
+
 async def shop_is_active(item_id: str) -> bool:
-    async with aiosqlite.connect(DB_FILE) as db:
-        cur = await db.execute("""
-            SELECT 1
-            FROM shop_items s
-            JOIN items i ON i.item_id=s.item_id
-            WHERE s.item_id=? AND s.ativo=1 AND i.deleted=0
-        """, (item_id,))
-        return (await cur.fetchone()) is not None
+    it = await item_get(item_id)
+    return bool(it) and int(it.get("deleted", 0)) == 0
+
 
 async def shop_decrease_stock(item_id: str, n: int = 1) -> bool:
-    """
-    estoque NULL = infinito
-    """
-    async with aiosqlite.connect(DB_FILE) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT estoque FROM shop_items WHERE item_id=? AND ativo=1", (item_id,))
-        row = await cur.fetchone()
-        if not row:
-            return False
-        estoque = row["estoque"]
-        if estoque is None:
-            return True
-        estoque = int(estoque)
-        if estoque < n:
-            return False
-        await db.execute("UPDATE shop_items SET estoque=? WHERE item_id=?", (estoque - n, item_id))
-        await db.commit()
-        return True
+    # Estoque infinito por padrão para a loja principal
+    return True
 
 async def master_chest_add(item_id: str, qtd: int):
     async with aiosqlite.connect(DB_FILE) as db:
