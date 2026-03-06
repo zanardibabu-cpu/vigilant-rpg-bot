@@ -311,6 +311,7 @@ def build_shop_embed(loja: str, page: int, itens: List[Dict[str, Any]]) -> disco
         "alfaiate": "🧵 Atelier das Ruínas — ALFAIATE",
         "arcano": "🔮 Escola Arcana — ARCANOS",
         "igreja": "⛪ Santuário — IGREJA",
+        "armaduras": "🛡️ Arsenal Blindado — ARMADURAS",
     }
 
     embed = discord.Embed(
@@ -1707,6 +1708,29 @@ async def shop_list_active() -> List[dict]:
             WHERE deleted=0
             ORDER BY nome COLLATE NOCASE
         """)
+        rows = await cur.fetchall()
+        out = []
+        for r in rows:
+            it = dict(r)
+            it["preco_loja"] = int(it.get("preco", 0))
+            it["estoque"] = None
+            it["ativo"] = 1
+            it["bonus"] = jload(it.get("bonus_json"), {})
+            it["efeito"] = jload(it.get("efeito_json"), {})
+            it["classes"] = jload(it.get("classes_json"), [])
+            out.append(it)
+        return out
+
+
+async def items_list_active(loja: str) -> List[dict]:
+    loja = (loja or "mercador").lower().strip()
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("""
+            SELECT * FROM items
+            WHERE deleted=0 AND loja=?
+            ORDER BY preco ASC, nome COLLATE NOCASE
+        """, (loja,))
         rows = await cur.fetchall()
         out = []
         for r in rows:
