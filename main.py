@@ -1198,6 +1198,36 @@ INITIAL_ITEMS = {
 # Todos os itens do catálogo ficam visíveis na loja (ativo=1). Não existe mais 'itens iniciais' limitando vitrine.
 
 
+async def items_list_active(loja: str) -> List[Dict[str, Any]]:
+    loja = (loja or "mercador").lower().strip()
+    if loja not in LOJAS_VALIDAS:
+        loja = "mercador"
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM items WHERE deleted=0 AND loja=? ORDER BY preco ASC, nome ASC",
+            (loja,)
+        )
+        rows = await cur.fetchall()
+    itens = []
+    for row in rows:
+        it = dict(row)
+        try:
+            it["bonus"] = json.loads(it.get("bonus_json") or "{}")
+        except Exception:
+            it["bonus"] = {}
+        try:
+            it["efeito"] = json.loads(it.get("efeito_json") or "{}")
+        except Exception:
+            it["efeito"] = {}
+        try:
+            it["classes"] = json.loads(it.get("classes_json") or "[]")
+        except Exception:
+            it["classes"] = []
+        itens.append(it)
+    return itens
+
+
 async def item_upsert(item_id: str, it: Dict[str, Any]):
     loja = (it.get("loja") or "mercador").lower().strip()
     if loja not in LOJAS_VALIDAS:
