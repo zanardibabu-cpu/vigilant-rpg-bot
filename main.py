@@ -1619,6 +1619,7 @@ def ensure_equipado_format(eq: dict) -> dict:
     return eq
 
 async def get_player(user_id: int):
+    await init_db()
     async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM players WHERE user_id=?", (user_id,))
@@ -1633,6 +1634,7 @@ async def get_player(user_id: int):
         return p
 
 async def save_player(p: dict):
+    await init_db()
     async with aiosqlite.connect(DB_FILE) as db:
         p["equipado"] = ensure_equipado_format(p.get("equipado", {}))
         await db.execute("""
@@ -1667,6 +1669,12 @@ async def save_player(p: dict):
         ))
         await db.commit()
 
+async def delete_player(user_id: int):
+    await init_db()
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("DELETE FROM players WHERE user_id=?", (user_id,))
+        await db.commit()
+
 async def require_player(interaction: discord.Interaction):
     p = await get_player(interaction.user.id)
     if not p:
@@ -1683,6 +1691,7 @@ async def require_player(interaction: discord.Interaction):
 # ==============================
 
 async def item_get(item_id: str) -> Optional[dict]:
+    await init_db()
     async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM items WHERE item_id=?", (item_id,))
@@ -1723,6 +1732,7 @@ async def shop_list_active() -> List[dict]:
 
 
 async def items_list_active(loja: str) -> List[dict]:
+    await init_db()
     loja = (loja or "mercador").lower().strip()
     async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row
@@ -2163,5 +2173,330 @@ async def list_all_player_ids() -> List[int]:
 # ==============================
 # RUN
 # ==============================
+
+
+# ==============================
+# COMANDOS CONSOLIDADOS / EVENTOS
+# ==============================
+
+def _player_summary_embed(user: discord.abc.User, p: dict) -> discord.Embed:
+    embed = discord.Embed(title=f"📜 Perfil de {user.display_name}", color=discord.Color.blurple())
+    stats = p.get("stats", {}) or {}
+    embed.add_field(
+        name="Personagem",
+        value=(
+            f"Classe: **{p['classe'].capitalize()}**\n"
+            f"Nível: **{p['level']}**\n"
+            f"XP: **{p['xp']} / {xp_para_upar(int(p['level']))}**\n"
+            f"Gold: **{p['gold']}**"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="Recursos",
+        value=(
+            f"HP: **{p['hp']}**\n"
+            f"Mana: **{p['mana']}**\n"
+            f"Stamina: **{p['stamina']} / {p.get('max_stamina', STAMINA_MAX)}**"
+        ),
+        inline=True
+    )
+    embed.add_field(
+        name="Atributos",
+        value=(
+            f"ATK: **{stats.get('atk',0)}**\n"
+            f"MAG: **{stats.get('magia',0)}**\n"
+            f"DEF: **{stats.get('defesa',0)}**\n"
+            f"DES: **{stats.get('destreza',0)}**"
+        ),
+        inline=True
+    )
+    return embed
+
+@tree.command(name="start", description="Criar seu personagem.")
+@only_channel(CANAL_BEM_VINDO_ID, "bem-vindo")
+async def start_cmd(interaction: discord.Interaction):
+    await init_db()
+    existing = await get_player(interaction.user.id)
+    if existing:
+        await interaction.response.send_message("⚠️ Você já tem personagem. Use **/perfil**.", ephemeral=True)
+        return
+    await interaction.response.send_message("Escolha sua classe para criar o personagem:", view=ClasseView(), ephemeral=True)
+
+@tree.command(name="perfil", description="Ver seu perfil.")
+async def perfil_cmd(interaction: discord.Interaction):
+    p = await require_player(interaction)
+    if not p:
+        return
+    await interaction.response.send_message(embed=_player_summary_embed(interaction.user, p), ephemeral=True)
+
+@tree.command(name="spawn", description="Criar personagem nível 1 escolhendo classe.")
+@only_channel(CANAL_BEM_VINDO_ID, "bem-vindo")
+@app_commands.describe(classe="barbaro|guerreiro|arqueiro|mago|clerigo|assassino")
+async def spawn_cmd(interaction: discord.Interaction, classe: str):
+    await init_db()
+    classe = (classe or "").lower().strip()
+    if classe not in CLASSES:
+        await interaction.response.send_message("❌ Classe inválida.", ephemeral=True)
+        return
+    existing = await get_player(interaction.user.id)
+    if existing:
+        await interaction.response.send_message("⚠️ Você já tem personagem. Use **/perfil**.", ephemeral=True)
+        return
+    p = build_new_player(interaction.user.id, classe)
+    await save_player(p)
+    await interaction.response.send_message(
+        f"✅ Personagem criado como **{classe.capitalize()}**. HP **{p['hp']}** | Mana **{p['mana']}** | Gold **{p['gold']}**",
+        ephemeral=True
+    )
+
+@tree.command(name="comprar", description="Comprar item da loja.")
+@app_commands.describe(item_id="ID do item")
+async def comprar_cmd(interaction: discord.Interaction, item_id: str):
+    await interaction.response.defer(ephemeral=True)
+    p = await require_player(interaction)
+    if not p:
+        return
+    it = await item_get(item_id)
+    if not it or int(it.get("deleted", 0)) == 1:
+        await interaction.followup.send("❌ Item não encontrado.", ephemeral=True)
+        return
+    preco = int(it.get("preco", 0))
+    if int(p.get("gold", 0)) < preco:
+        await interaction.followup.send(f"❌ Gold insuficiente. Preço: **{preco}**.", ephemeral=True)
+        return
+    inv = p.get("inventario", []) or []
+    inv.append(it["item_id"])
+    p["inventario"] = inv
+    p["gold"] = int(p.get("gold", 0)) - preco
+    await save_player(p)
+    await interaction.followup.send(f"✅ Você comprou **{it['nome']}** por **{preco} gold**.", ephemeral=True)
+
+@tree.command(name="vender", description="Vender item por 60% do preço.")
+@app_commands.describe(item_id="ID do item")
+async def vender_cmd(interaction: discord.Interaction, item_id: str):
+    await interaction.response.defer(ephemeral=True)
+    p = await require_player(interaction)
+    if not p:
+        return
+    inv = p.get("inventario", []) or []
+    if item_id not in inv:
+        await interaction.followup.send("❌ Você não possui esse item no inventário.", ephemeral=True)
+        return
+    it = await item_get(item_id)
+    if not it:
+        await interaction.followup.send("❌ Item inválido.", ephemeral=True)
+        return
+    inv.remove(item_id)
+    p["inventario"] = inv
+    valor = int(int(it.get("preco", 0)) * 0.6)
+    p["gold"] = int(p.get("gold", 0)) + valor
+    await save_player(p)
+    await interaction.followup.send(f"💰 Você vendeu **{it['nome']}** por **{valor} gold**.", ephemeral=True)
+
+def weighted_choice_monster() -> Dict[str, Any]:
+    vals = list(MONSTROS.values())
+    weights = [max(1, int(v.get("peso", 1))) for v in vals]
+    return random.choices(vals, weights=weights, k=1)[0]
+
+@tree.command(name="cacar", description="Caçar um inimigo.")
+@only_channel(CANAL_CACAR_ID, "cacar")
+async def cacar_cmd(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=False)
+    p = await require_player(interaction)
+    if not p:
+        return
+    if await blocked_by_rest(interaction, p):
+        return
+    if await blocked_by_narration(interaction):
+        return
+    if int(p.get("stamina", STAMINA_MAX)) < STAMINA_CUSTO_CACAR:
+        await interaction.followup.send("❌ Stamina insuficiente.", ephemeral=True)
+        return
+    if now_ts() - int(p.get("last_hunt_ts", 0)) < CACAR_COOLDOWN_S:
+        await interaction.followup.send("⏳ Aguarde o cooldown da caça.", ephemeral=True)
+        return
+
+    enemy = weighted_choice_monster()
+    enemy_hp, enemy_def = enemy_get_stats(enemy)
+    atk_total = await total_stat(p, "atk")
+    defesa_total = await total_stat(p, "defesa")
+    d20 = rolar_d20()
+    dano = max(0, d20 + atk_total - enemy_def)
+    p["stamina"] = int(p.get("stamina", STAMINA_MAX)) - STAMINA_CUSTO_CACAR
+    p["last_hunt_ts"] = now_ts()
+
+    msg = [
+        f"🎯 Inimigo: **{enemy['nome']}**",
+        f"❤️ HP inimigo: **{enemy_hp}** | 🛡️ DEF inimigo: **{enemy_def}**",
+        f"🎲 D20: **{d20}** | ⚔️ Seu ATK total: **{atk_total}** | 🛡️ Sua DEF: **{defesa_total}**",
+        f"💥 Dano causado: **{dano}**",
+    ]
+
+    if enemy_hp - dano <= 0:
+        xp = int(enemy.get("xp", 0))
+        gold = int(enemy.get("gold", 0))
+        p["xp"] = int(p.get("xp", 0)) + xp
+        p["gold"] = int(p.get("gold", 0)) + gold
+        upou = await try_auto_level(p)
+        await save_player(p)
+        msg.append(f"🏆 Vitória! +**{xp} XP** | +**{gold} gold**")
+        if upou:
+            msg.append(f"🆙 Você subiu **{upou} nível(is)**.")
+        await interaction.followup.send("\n".join(msg), ephemeral=False)
+        return
+
+    dano_recebido = max(0, int(enemy.get("atk", 0)) - defesa_total)
+    p["hp"] = int(p.get("hp", 0)) - dano_recebido
+    if int(p["hp"]) <= -1:
+        await delete_player(p["user_id"])
+        msg.append(f"☠️ O inimigo sobreviveu com **{enemy_hp - dano} HP**.")
+        msg.append(f"💢 Você recebeu **{dano_recebido}** de dano e morreu definitivamente.")
+        msg.append("🪦 Seu personagem foi apagado. Use **/start** para criar outro.")
+        await interaction.followup.send("\n".join(msg), ephemeral=False)
+        return
+
+    await save_player(p)
+    msg.append(f"☠️ O inimigo sobreviveu com **{enemy_hp - dano} HP**.")
+    msg.append(f"💢 Você recebeu **{dano_recebido}** de dano. HP atual: **{p['hp']}**")
+    await interaction.followup.send("\n".join(msg), ephemeral=False)
+
+PENDING_DUELS: Dict[int, Dict[str, Any]] = {}
+ACTIVE_DUELS: Dict[int, Dict[str, Any]] = {}
+
+async def _duel_attack_logic(interaction: discord.Interaction, attacker_id: int):
+    duel = ACTIVE_DUELS.get(attacker_id)
+    if not duel:
+        await interaction.response.send_message("❌ Você não está em um duelo ativo.", ephemeral=True)
+        return
+    if duel["turn"] != attacker_id:
+        await interaction.response.send_message("⏳ Não é seu turno.", ephemeral=True)
+        return
+    defender_id = duel["p2"] if duel["p1"] == attacker_id else duel["p1"]
+    atk_p = await get_player(attacker_id)
+    def_p = await get_player(defender_id)
+    if not atk_p or not def_p:
+        ACTIVE_DUELS.pop(duel["p1"], None)
+        ACTIVE_DUELS.pop(duel["p2"], None)
+        await interaction.response.send_message("❌ Um dos jogadores não possui personagem.", ephemeral=True)
+        return
+    d20 = rolar_d20()
+    atk_total = await total_stat(atk_p, "atk")
+    def_total = await total_stat(def_p, "defesa")
+    dano = max(0, d20 + atk_total - def_total)
+    def_p["hp"] = int(def_p["hp"]) - dano
+    if int(def_p["hp"]) <= 0:
+        saque = math.floor(int(def_p.get("gold", 0)) * 0.10)
+        def_p["gold"] = max(0, int(def_p.get("gold", 0)) - saque)
+        atk_p["gold"] = int(atk_p.get("gold", 0)) + saque
+        await save_player(atk_p)
+        await save_player(def_p)
+        ACTIVE_DUELS.pop(duel["p1"], None)
+        ACTIVE_DUELS.pop(duel["p2"], None)
+        await interaction.response.edit_message(
+            content=f"⚔️ **Duelo encerrado!**\n🎲 D20: **{d20}** | Dano: **{dano}**\n🏆 <@{attacker_id}> venceu.\n💰 Transferência: **{saque} gold**.",
+            view=None
+        )
+        return
+    await save_player(def_p)
+    duel["turn"] = defender_id
+    ACTIVE_DUELS[duel["p1"]] = duel
+    ACTIVE_DUELS[duel["p2"]] = duel
+    await interaction.response.edit_message(
+        content=f"⚔️ **Duelo em andamento**\n🎲 D20: **{d20}** | Dano: **{dano}**\n❤️ HP de <@{defender_id}>: **{def_p['hp']}**\n➡️ Turno de <@{defender_id}>",
+        view=DuelView(duel)
+    )
+
+class DuelView(discord.ui.View):
+    def __init__(self, duel: Dict[str, Any]):
+        super().__init__(timeout=600)
+        self.duel = duel
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id in (self.duel["p1"], self.duel["p2"])
+
+    @discord.ui.button(label="Atacar", style=discord.ButtonStyle.danger, emoji="⚔️")
+    async def attack(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _duel_attack_logic(interaction, interaction.user.id)
+
+    @discord.ui.button(label="Desistir", style=discord.ButtonStyle.secondary, emoji="🏳️")
+    async def give_up(self, interaction: discord.Interaction, button: discord.ui.Button):
+        duel = ACTIVE_DUELS.get(interaction.user.id)
+        if not duel:
+            await interaction.response.send_message("❌ Você não está em duelo.", ephemeral=True)
+            return
+        loser = interaction.user.id
+        winner = duel["p2"] if duel["p1"] == loser else duel["p1"]
+        loser_p = await get_player(loser)
+        winner_p = await get_player(winner)
+        saque = 0
+        if loser_p and winner_p:
+            saque = math.floor(int(loser_p.get("gold", 0)) * 0.10)
+            loser_p["gold"] = max(0, int(loser_p.get("gold", 0)) - saque)
+            winner_p["gold"] = int(winner_p.get("gold", 0)) + saque
+            await save_player(loser_p)
+            await save_player(winner_p)
+        ACTIVE_DUELS.pop(duel["p1"], None)
+        ACTIVE_DUELS.pop(duel["p2"], None)
+        await interaction.response.edit_message(
+            content=f"🏳️ <@{loser}> desistiu. <@{winner}> venceu e recebeu **{saque} gold**.",
+            view=None
+        )
+
+@tree.command(name="x1", description="Desafiar outro jogador para duelo.")
+@app_commands.describe(jogador="Jogador a ser desafiado")
+async def x1_cmd(interaction: discord.Interaction, jogador: discord.Member):
+    if jogador.bot or jogador.id == interaction.user.id:
+        await interaction.response.send_message("❌ Escolha um jogador válido.", ephemeral=True)
+        return
+    p1 = await get_player(interaction.user.id)
+    p2 = await get_player(jogador.id)
+    if not p1 or not p2:
+        await interaction.response.send_message("❌ Ambos precisam ter personagem.", ephemeral=True)
+        return
+    PENDING_DUELS[jogador.id] = {"p1": interaction.user.id, "p2": jogador.id, "expires": now_ts() + 300}
+    await interaction.response.send_message(
+        f"⚔️ {interaction.user.mention} desafiou {jogador.mention}.\n{jogador.mention}, use **/aceitar_duelo** em até 5 minutos.",
+        ephemeral=False
+    )
+
+@tree.command(name="aceitar_duelo", description="Aceitar duelo pendente.")
+async def aceitar_duelo_cmd(interaction: discord.Interaction):
+    duel = PENDING_DUELS.get(interaction.user.id)
+    if not duel or duel["expires"] < now_ts():
+        PENDING_DUELS.pop(interaction.user.id, None)
+        await interaction.response.send_message("❌ Você não tem duelo pendente.", ephemeral=True)
+        return
+    PENDING_DUELS.pop(interaction.user.id, None)
+    duel["turn"] = random.choice([duel["p1"], duel["p2"]])
+    ACTIVE_DUELS[duel["p1"]] = duel
+    ACTIVE_DUELS[duel["p2"]] = duel
+    await interaction.response.send_message(
+        f"⚔️ **Duelo iniciado!**\n<@{duel['p1']}> vs <@{duel['p2']}>\n➡️ Primeiro turno: <@{duel['turn']}>",
+        view=DuelView(duel),
+        ephemeral=False
+    )
+
+@tree.command(name="atacar_duelo", description="Atacar no duelo ativo.")
+async def atacar_duelo_cmd(interaction: discord.Interaction):
+    await _duel_attack_logic(interaction, interaction.user.id)
+
+@client.event
+async def on_ready():
+    try:
+        await init_db()
+        await seed_initial_data()
+        await seed_initial_spells()
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            tree.clear_commands(guild=guild)
+            tree.copy_global_to(guild=guild)
+            synced = await tree.sync(guild=guild)
+        else:
+            synced = await tree.sync()
+        print(f"✅ Bot online como {client.user} | comandos syncados: {len(synced)}")
+    except Exception:
+        import traceback
+        print(traceback.format_exc())
 
 client.run(TOKEN)
