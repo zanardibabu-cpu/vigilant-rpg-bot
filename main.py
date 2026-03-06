@@ -1921,6 +1921,14 @@ def build_new_player(user_id: int, classe: str) -> dict:
         "spellbook": [],
     }
 
+async def build_new_player_at_level(user_id: int, classe: str, nivel: int) -> dict:
+    nivel = max(1, min(100, int(nivel or 1)))
+    p = build_new_player(user_id, classe)
+    while int(p.get("level", 1)) < nivel:
+        await apply_level_up_once(p)
+    p["xp"] = 0
+    return p
+
 
 class ClasseSelect(discord.ui.Select):
     def __init__(self):
@@ -2230,23 +2238,168 @@ async def perfil_cmd(interaction: discord.Interaction):
         return
     await interaction.response.send_message(embed=_player_summary_embed(interaction.user, p), ephemeral=True)
 
-@tree.command(name="spawn", description="Criar personagem nível 1 escolhendo classe.")
-@only_channel(CANAL_BEM_VINDO_ID, "bem-vindo")
-@app_commands.describe(classe="barbaro|guerreiro|arqueiro|mago|clerigo|assassino")
-async def spawn_cmd(interaction: discord.Interaction, classe: str):
+@tree.command(name="reset", description="(Mestre) Resetar personagem do jogador.")
+@only_master_channel()
+@app_commands.describe(membro="Jogador que terá o personagem apagado")
+async def reset_cmd(interaction: discord.Interaction, membro: discord.Member):
+    await init_db()
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("DELETE FROM players WHERE user_id=?", (membro.id,))
+        await db.commit()
+    await interaction.response.send_message(f"🗑️ Personagem de {membro.mention} resetado. Use **/start** ou **/spawn** para criar outro.", ephemeral=False)
+
+@tree.command(name="spawn", description="(Mestre) Criar/Recriar personagem para um jogador.")
+@only_master_channel()
+@app_commands.describe(
+    membro="Jogador alvo",
+    classe="barbaro|guerreiro|arqueiro|mago|clerigo|assassino",
+    nivel="Nível inicial (1-100)",
+    gold="Gold inicial",
+    xp="XP inicial",
+    atk="ATK base opcional",
+    defesa="DEFESA base opcional",
+    magia="MAGIA base opcional",
+    sorte="SORTE base opcional",
+    furtividade="FURTIVIDADE base opcional",
+    destreza="DESTREZA base opcional",
+    itens="Itens CSV ex: pocao_vida,anel_arcano",
+    sobrescrever="sim para apagar e recriar do zero"
+)
+async def spawn_cmd(
+    interaction: discord.Interaction,
+    membro: discord.Member,
+    classe: str,
+    nivel: app_commands.Range[int, 1, 100] = 1,
+    gold: int = 100,
+    xp: int = 0,
+    atk: Optional[int] = None,
+    defesa: Optional[int] = None,
+    magia: Optional[int] = None,
+    sorte: Optional[int] = None,
+    furtividade: Optional[int] = None,
+    destreza: Optional[int] = None,
+    itens: str = "",
+    sobrescrever: str = "nao",
+):
     await init_db()
     classe = (classe or "").lower().strip()
     if classe not in CLASSES:
-        await interaction.response.send_message("❌ Classe inválida.", ephemeral=True)
+        await interaction.response.send_message(f"❌ Classe inválida. Use: {', '.join(CLASSES.keys())}", ephemeral=True)
         return
-    existing = await get_player(interaction.user.id)
-    if existing:
-        await interaction.response.send_message("⚠️ Você já tem personagem. Use **/perfil**.", ephemeral=True)
-        return
-    p = build_new_player(interaction.user.id, classe)
+
+    do_reset = (sobrescrever or "nao").lower().strip() in {"sim", "s", "yes", "y", "true", "1"}
+    if do_reset:
+        async with aiosqlite.connect(DB_FILE) as db:
+            await db.execute("DELETE FROM players WHERE user_id=?", (membro.id,))
+            await db.commit()
+
+    p = await get_player(membro.id)
+    if not p or do_reset:
+        p = await build_new_player_at_level(membro.id, classe, nivel)
+    else:
+        p = await build_new_player_at_level(membro.id, classe, nivel)
+
+    p["classe"] = classe
+    p["gold"] = max(0, int(gold))
+    p["xp"] = max(0, int(xp))
+
+    base_stats = dict(p.get("stats", {}))
+    if atk is not None: base_stats["atk"] = int(atk)
+    if defesa is not None: base_stats["defesa"] = int(defesa)
+    if magia is not None: base_stats["magia"] = int(magia)
+    if sorte is not None: base_stats["sorte"] = int(sorte)
+    if furtividade is not None: base_stats["furtividade"] = int(furtividade)
+    if destreza is not None: base_stats["destreza"] = int(destreza)
+    p["stats"] = base_stats
+
+    p.setdefault("inventario", [])
+    added = 0
+    raw_items = [x.strip().lower() for x in (itens or "").split(",") if x.strip()]
+    for item_id in raw_items:
+        it = await item_get(item_id)
+        if it and int(it.get("deleted", 0)) == 0:
+            p["inventario"].append(item_id)
+            added += 1
+
+    p["equipado"] = ensure_equipado_format(p.get("equipado", {}))
     await save_player(p)
     await interaction.response.send_message(
-        f"✅ Personagem criado como **{classe.capitalize()}**. HP **{p['hp']}** | Mana **{p['mana']}** | Gold **{p['gold']}**",
+        "✅ **Spawn concluído**\n"
+        f"Jogador: {membro.mention}\n"
+        f"Classe: **{classe.capitalize()}** | Nível: **{p['level']}** | XP: **{p['xp']}** | Gold: **{p['gold']}**\n"
+        f"Itens adicionados: **{added}**",
+        ephemeral=False
+    )
+
+@tree.command(name="resetar", description="(Mestre) Resetar personagem do jogador.")
+@only_master_channel()
+@app_commands.describe(membro="Jogador que terá o personagem apagado")
+async def resetar_cmd(interaction: discord.Interaction, membro: discord.Member):
+    await init_db()
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("DELETE FROM players WHERE user_id=?", (membro.id,))
+        await db.commit()
+    await interaction.response.send_message(f"🗑️ Personagem de {membro.mention} resetado. (Use /start)", ephemeral=False)
+
+@tree.command(name="setlevel", description="(Mestre) Definir nível (não recalcula stats).")
+@only_master_channel()
+async def setlevel_cmd(interaction: discord.Interaction, membro: discord.Member, nivel: app_commands.Range[int, 1, 100]):
+    await init_db()
+    p = await get_player(membro.id)
+    if not p:
+        await interaction.response.send_message("❌ Jogador sem personagem.", ephemeral=True)
+        return
+    p["level"] = int(nivel)
+    await save_player(p)
+    await interaction.response.send_message(f"🆙 {membro.mention} agora está no nível **{nivel}**.", ephemeral=False)
+
+@tree.command(name="mdano", description="(Mestre) Aplicar dano manual em jogador.")
+@only_master_channel()
+async def mdano_cmd(interaction: discord.Interaction, membro: discord.Member, dano: app_commands.Range[int, 1, 999999]):
+    await init_db()
+    p = await get_player(membro.id)
+    if not p:
+        await interaction.response.send_message("❌ Jogador sem personagem.", ephemeral=True)
+        return
+    p["hp"] = int(p.get("hp", 0)) - int(dano)
+    if int(p["hp"]) <= -1:
+        async with aiosqlite.connect(DB_FILE) as db:
+            await db.execute("DELETE FROM players WHERE user_id=?", (membro.id,))
+            await db.commit()
+        await interaction.response.send_message(f"☠️ {membro.mention} morreu e o personagem foi resetado.", ephemeral=False)
+        return
+    await save_player(p)
+    await interaction.response.send_message(f"💥 {membro.mention} sofreu **{dano}** dano. (HP {p['hp']})", ephemeral=False)
+
+@tree.command(name="mcurar", description="(Mestre) Curar manualmente jogador.")
+@only_master_channel()
+async def mcurar_cmd(interaction: discord.Interaction, membro: discord.Member, hp: int = 0, mana: int = 0):
+    await init_db()
+    if hp < 0 or mana < 0:
+        await interaction.response.send_message("❌ Valores inválidos.", ephemeral=True)
+        return
+    p = await get_player(membro.id)
+    if not p:
+        await interaction.response.send_message("❌ Jogador sem personagem.", ephemeral=True)
+        return
+    p["hp"] = int(p.get("hp", 0)) + int(hp)
+    p["mana"] = int(p.get("mana", 0)) + int(mana)
+    await save_player(p)
+    await interaction.response.send_message(f"✨ {membro.mention} curado: ❤ +{hp} | 🔵 +{mana}.", ephemeral=False)
+
+@tree.command(name="mstatus", description="(Mestre) Status rápido de um jogador.")
+@only_master_channel()
+async def mstatus_cmd(interaction: discord.Interaction, membro: discord.Member):
+    await init_db()
+    p = await get_player(membro.id)
+    if not p:
+        await interaction.response.send_message("❌ Jogador sem personagem.", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"🧾 **Status — {membro.display_name}**\n"
+        f"Classe: {p['classe']} | Lv {p['level']} | XP {p['xp']}\n"
+        f"❤ HP {p['hp']} | 🔵 Mana {p['mana']} | 🥵 Stamina {p['stamina']}/{p['max_stamina']} | 💰 Gold {p['gold']}\n"
+        f"⭐ Pontos pendentes: {p.get('pontos',0)}",
         ephemeral=True
     )
 
