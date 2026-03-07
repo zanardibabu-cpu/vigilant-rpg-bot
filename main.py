@@ -42,7 +42,7 @@ CANAL_COMANDOS_ID  = 1472216958647795965
 CANAL_LOJA_ID      = 1472100628355350633
 CANAL_MESTRE_ID    = 1472274401289310248
 CANAL_CACAR_ID     = 1472365134801276998
-CANAL_ARENA_X1_ID  = 1479210311662960711
+CANAL_ARENA_X1_ID  = 1472365134801276998
 CANAL_TAVERNA_ID   = 0
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -1986,32 +1986,19 @@ class ClasseView(discord.ui.View):
         self.add_item(ClasseSelect())
 
 
-@tree.command(name="start", description="Criar seu personagem.")
-async def start_cmd(interaction: discord.Interaction):
-    existente = await get_player(interaction.user.id)
-    if existente:
-        await interaction.response.send_message("⚠️ Você já tem personagem. Use **/perfil**.", ephemeral=True)
-        return
-
-    if interaction.channel_id != CANAL_BEM_VINDO_ID:
-        await interaction.response.send_message(
-            "❌ Criação de personagem só no canal de **bem-vindo**.",
-            ephemeral=True
-        )
-        return
-
-    await interaction.response.send_message(
-        "🧬 **Criação de personagem**\nEscolha sua classe no menu abaixo.",
-        view=ClasseView(),
-        ephemeral=True
-    )
-
-
 @tree.command(name="spaw", description="(Mestre) Criar personagem para outro jogador.")
 @only_master_channel()
 @app_commands.describe(jogador="Jogador alvo", classe="Classe do personagem")
-async def spaw_cmd(interaction: discord.Interaction, jogador: discord.Member, classe: str):
-    classe_key = (classe or "").strip().lower()
+@app_commands.choices(classe=[
+    app_commands.Choice(name="Clérigo", value="clerigo"),
+    app_commands.Choice(name="Bárbaro", value="barbaro"),
+    app_commands.Choice(name="Arqueiro", value="arqueiro"),
+    app_commands.Choice(name="Mago", value="mago"),
+    app_commands.Choice(name="Assassino", value="assassino"),
+    app_commands.Choice(name="Guerreiro", value="guerreiro"),
+])
+async def spaw_cmd(interaction: discord.Interaction, jogador: discord.Member, classe: app_commands.Choice[str]):
+    classe_key = (classe.value or "").strip().lower()
     if classe_key not in CLASSES:
         validas = ", ".join(sorted([c.upper() for c in CLASSES.keys()]))
         await interaction.response.send_message(
@@ -2028,26 +2015,7 @@ async def spaw_cmd(interaction: discord.Interaction, jogador: discord.Member, cl
     novo = build_new_player(jogador.id, classe_key)
     await save_player(novo)
     await interaction.response.send_message(
-        f"✅ Personagem criado para {jogador.mention}.\n\nClasse: {classe_key.upper()}\nNível: 1",
-        ephemeral=True
-    )
-
-
-@tree.command(name="reset", description="(Mestre) Resetar o personagem de um jogador.")
-@only_master_channel()
-@app_commands.describe(jogador="Jogador alvo")
-async def reset_cmd(interaction: discord.Interaction, jogador: discord.Member):
-    existente = await get_player(jogador.id)
-    if not existente:
-        await interaction.response.send_message("❌ Esse jogador não possui personagem para resetar.", ephemeral=True)
-        return
-
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("DELETE FROM players WHERE user_id=?", (jogador.id,))
-        await db.commit()
-
-    await interaction.response.send_message(
-        f"♻️ Personagem de {jogador.mention} resetado com sucesso.",
+        f"✅ Personagem criado para {jogador.mention}: {classe_key.upper()} nível 1.",
         ephemeral=True
     )
 
@@ -2707,8 +2675,6 @@ async def dargold_exceto_cmd(interaction: discord.Interaction, quantidade: int, 
 
 
 async def _ensure_x1_channel(interaction: discord.Interaction) -> bool:
-    print(f"[X1 DEBUG] interaction.channel_id={interaction.channel_id}")
-    print(f"[X1 DEBUG] CANAL_ARENA_X1_ID={CANAL_ARENA_X1_ID}")
     if interaction.channel_id != CANAL_ARENA_X1_ID:
         await interaction.response.send_message(
             "⚔️ O sistema de X1 só pode ser usado no canal 🏆arena-x1🏆.",
