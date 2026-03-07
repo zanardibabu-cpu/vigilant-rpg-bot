@@ -25,7 +25,6 @@ _COMMANDS_SYNCED = False
 X1_PENDENTES: Dict[int, Dict[str, Any]] = {}
 X1_ATIVOS: Dict[int, Dict[str, Any]] = {}
 X1_LOCK = asyncio.Lock()
-PLAYERS_TABLE_COLS_CACHE: Optional[set] = None
 
 # ==========================
 # CONFIG / IDs
@@ -2231,44 +2230,12 @@ class BandidosView(discord.ui.View):
 
 @tree.command(name="darxp", description="(Mestre) Dar XP para 1 jogador.")
 @only_master_channel()
-async def darxp_cmd(interaction: discord.Interaction, jogador: str, quantidade: int):
+async def darxp_cmd(interaction: discord.Interaction, jogador: discord.Member, quantidade: int):
     if quantidade == 0:
         await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
         return
 
-    jogador_raw = (jogador or "").strip()
-    if jogador_raw.lower() == "all":
-        ids = await list_all_player_ids()
-        if not ids:
-            await interaction.response.send_message("❌ Não há jogadores cadastrados.", ephemeral=True)
-            return
-
-        afetados = 0
-        for pid in ids:
-            p = await get_player(pid)
-            if not p:
-                continue
-            p["xp"] = int(p.get("xp", 0)) + quantidade
-            await try_auto_level(p)
-            await save_player(p)
-            afetados += 1
-
-        await interaction.response.send_message(
-            f"✅ XP {quantidade:+d} aplicado em {afetados} jogador(es).",
-            ephemeral=True
-        )
-        return
-
-    m = re.fullmatch(r"<@!?(\d+)>", jogador_raw)
-    if m:
-        target_id = int(m.group(1))
-    elif jogador_raw.isdigit():
-        target_id = int(jogador_raw)
-    else:
-        await interaction.response.send_message("❌ Use 'all', uma menção válida ou um ID de usuário.", ephemeral=True)
-        return
-
-    p = await get_player(target_id)
+    p = await get_player(jogador.id)
     if not p:
         await interaction.response.send_message("❌ Esse jogador não tem personagem.", ephemeral=True)
         return
@@ -2277,50 +2244,19 @@ async def darxp_cmd(interaction: discord.Interaction, jogador: str, quantidade: 
     upou = await try_auto_level(p)
     await save_player(p)
     await interaction.response.send_message(
-        f"✅ XP atualizado para <@{target_id}>: {quantidade:+d}."
+        f"✅ XP atualizado para {jogador.mention}: {quantidade:+d}."
         + (f" 🆙 Subiu {upou} nível(is)." if upou else ""),
         ephemeral=True
     )
 
 @tree.command(name="dargold", description="(Mestre) Dar gold para 1 jogador.")
 @only_master_channel()
-async def dargold_cmd(interaction: discord.Interaction, jogador: str, quantidade: int):
+async def dargold_cmd(interaction: discord.Interaction, jogador: discord.Member, quantidade: int):
     if quantidade == 0:
         await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
         return
 
-    jogador_raw = (jogador or "").strip()
-    if jogador_raw.lower() == "all":
-        ids = await list_all_player_ids()
-        if not ids:
-            await interaction.response.send_message("❌ Não há jogadores cadastrados.", ephemeral=True)
-            return
-
-        afetados = 0
-        for pid in ids:
-            p = await get_player(pid)
-            if not p:
-                continue
-            p["gold"] = int(p.get("gold", 0)) + quantidade
-            await save_player(p)
-            afetados += 1
-
-        await interaction.response.send_message(
-            f"✅ Gold {quantidade:+d} aplicado em {afetados} jogador(es).",
-            ephemeral=True
-        )
-        return
-
-    m = re.fullmatch(r"<@!?(\d+)>", jogador_raw)
-    if m:
-        target_id = int(m.group(1))
-    elif jogador_raw.isdigit():
-        target_id = int(jogador_raw)
-    else:
-        await interaction.response.send_message("❌ Use 'all', uma menção válida ou um ID de usuário.", ephemeral=True)
-        return
-
-    p = await get_player(target_id)
+    p = await get_player(jogador.id)
     if not p:
         await interaction.response.send_message("❌ Esse jogador não tem personagem.", ephemeral=True)
         return
@@ -2328,7 +2264,7 @@ async def dargold_cmd(interaction: discord.Interaction, jogador: str, quantidade
     p["gold"] = int(p.get("gold", 0)) + quantidade
     await save_player(p)
     await interaction.response.send_message(
-        f"✅ Gold atualizado para <@{target_id}>: {quantidade:+d}.",
+        f"✅ Gold atualizado para {jogador.mention}: {quantidade:+d}.",
         ephemeral=True
     )
 
