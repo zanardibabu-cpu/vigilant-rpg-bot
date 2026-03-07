@@ -1,6 +1,7 @@
 print("BOOT VERSION: 2026-03-04-01")
 
 import os
+import asyncio
 import time
 import json
 import math
@@ -20,6 +21,10 @@ intents.members = True
 
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
+_COMMANDS_SYNCED = False
+X1_PENDENTES: Dict[int, Dict[str, Any]] = {}
+X1_ATIVOS: Dict[int, Dict[str, Any]] = {}
+X1_LOCK = asyncio.Lock()
 
 # ==========================
 # CONFIG / IDs
@@ -43,6 +48,7 @@ CANAL_LOJA_ID      = 1472100628355350633
 CANAL_MESTRE_ID    = 1472274401289310248
 CANAL_CACAR_ID     = 1472365134801276998
 CANAL_TAVERNA_ID   = 0
+CANAL_ARENA_X1_ID  = 1472365134801276998
 
 BASE_DIR = Path(__file__).resolve().parent
 # Persistência no Railway: se você habilitar um Volume montado em /data, o banco fica permanente
@@ -117,6 +123,43 @@ def only_master_channel():
         return interaction.user.id == MESTRE_ID
 
     return app_commands.check(predicate)
+
+
+async def ensure_x1_arena_channel(interaction: discord.Interaction) -> bool:
+    if interaction.channel_id == CANAL_ARENA_X1_ID:
+        return True
+    msg = "⚔️ O sistema de X1 só pode ser usado no canal 🏆arena-x1🏆."
+    if interaction.response.is_done():
+        await interaction.followup.send(msg, ephemeral=True)
+    else:
+        await interaction.response.send_message(msg, ephemeral=True)
+    return False
+
+def x1_user_busy(user_id: int) -> bool:
+    if user_id in X1_ATIVOS:
+        return True
+    for pend in X1_PENDENTES.values():
+        if user_id in (pend["challenger_id"], pend["target_id"]):
+            return True
+    return False
+
+def x1_duel_status_text(user_id: int) -> str:
+    pend = X1_PENDENTES.get(user_id)
+    if pend:
+        return (
+            f"⏳ Você tem um desafio pendente de <@{pend['challenger_id']}>. "
+            "Use /aceitarx1 ou /recusarx1."
+        )
+
+    for pend in X1_PENDENTES.values():
+        if pend["challenger_id"] == user_id:
+            return f"⏳ Você desafiou <@{pend['target_id']}> e aguarda resposta."
+
+    active = X1_ATIVOS.get(user_id)
+    if active:
+        return f"⚔️ X1 ativo contra <@{active['opponent_id']}>."
+
+    return "ℹ️ Você não está em nenhum X1 no momento."
 
 async def blocked_by_rest(interaction: discord.Interaction, p: dict) -> bool:
     if now_ts() < int(p.get("rest_until_ts", 0)):
@@ -2149,6 +2192,349 @@ class BandidosView(discord.ui.View):
 
 # ---------- DAR XP / GOLD (individual / all / todos_exceto)
 
+@tree.command(name="darxp", description="(Mestre) Dar XP para 1 jogador.")
+@only_master_channel()
+async def darxp_cmd(interaction: discord.Interaction, jogador: discord.Member, quantidade: int):
+    if quantidade == 0:
+        await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
+        return
+
+    p = await get_player(jogador.id)
+    if not p:
+        await interaction.response.send_message("❌ Esse jogador não tem personagem.", ephemeral=True)
+        return
+
+    p["xp"] = int(p.get("xp", 0)) + quantidade
+    upou = await try_auto_level(p)
+    await save_player(p)
+    await interaction.response.send_message(
+        f"✅ XP atualizado para {jogador.mention}: {quantidade:+d}."
+        + (f" 🆙 Subiu {upou} nível(is)." if upou else ""),
+        ephemeral=True
+    )
+
+@tree.command(name="dargold", description="(Mestre) Dar gold para 1 jogador.")
+@only_master_channel()
+async def dargold_cmd(interaction: discord.Interaction, jogador: discord.Member, quantidade: int):
+    if quantidade == 0:
+        await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
+        return
+
+    p = await get_player(jogador.id)
+    if not p:
+        await interaction.response.send_message("❌ Esse jogador não tem personagem.", ephemeral=True)
+        return
+
+    p["gold"] = int(p.get("gold", 0)) + quantidade
+    await save_player(p)
+    await interaction.response.send_message(
+        f"✅ Gold atualizado para {jogador.mention}: {quantidade:+d}.",
+        ephemeral=True
+    )
+
+@tree.command(name="darxp_todos", description="(Mestre) Dar XP para todos os jogadores.")
+@only_master_channel()
+async def darxp_todos_cmd(interaction: discord.Interaction, quantidade: int):
+    if quantidade == 0:
+        await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
+        return
+
+    ids = await list_all_player_ids()
+    if not ids:
+        await interaction.response.send_message("❌ Não há jogadores cadastrados.", ephemeral=True)
+        return
+
+    afetados = 0
+    for uid in ids:
+        p = await get_player(uid)
+        if not p:
+            continue
+        p["xp"] = int(p.get("xp", 0)) + quantidade
+        await try_auto_level(p)
+        await save_player(p)
+        afetados += 1
+
+    await interaction.response.send_message(f"✅ XP {quantidade:+d} aplicado em {afetados} jogador(es).", ephemeral=True)
+
+@tree.command(name="dargold_todos", description="(Mestre) Dar gold para todos os jogadores.")
+@only_master_channel()
+async def dargold_todos_cmd(interaction: discord.Interaction, quantidade: int):
+    if quantidade == 0:
+        await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
+        return
+
+    ids = await list_all_player_ids()
+    if not ids:
+        await interaction.response.send_message("❌ Não há jogadores cadastrados.", ephemeral=True)
+        return
+
+    afetados = 0
+    for uid in ids:
+        p = await get_player(uid)
+        if not p:
+            continue
+        p["gold"] = int(p.get("gold", 0)) + quantidade
+        await save_player(p)
+        afetados += 1
+
+    await interaction.response.send_message(f"✅ Gold {quantidade:+d} aplicado em {afetados} jogador(es).", ephemeral=True)
+
+@tree.command(name="darxp_exceto", description="(Mestre) Dar XP para todos, exceto um jogador.")
+@only_master_channel()
+async def darxp_exceto_cmd(interaction: discord.Interaction, quantidade: int, exceto: discord.Member):
+    if quantidade == 0:
+        await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
+        return
+
+    ids = await list_all_player_ids()
+    if not ids:
+        await interaction.response.send_message("❌ Não há jogadores cadastrados.", ephemeral=True)
+        return
+
+    afetados = 0
+    for uid in ids:
+        if uid == exceto.id:
+            continue
+        p = await get_player(uid)
+        if not p:
+            continue
+        p["xp"] = int(p.get("xp", 0)) + quantidade
+        await try_auto_level(p)
+        await save_player(p)
+        afetados += 1
+
+    await interaction.response.send_message(
+        f"✅ XP {quantidade:+d} aplicado em {afetados} jogador(es), exceto {exceto.mention}.",
+        ephemeral=True
+    )
+
+@tree.command(name="dargold_exceto", description="(Mestre) Dar gold para todos, exceto um jogador.")
+@only_master_channel()
+async def dargold_exceto_cmd(interaction: discord.Interaction, quantidade: int, exceto: discord.Member):
+    if quantidade == 0:
+        await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
+        return
+
+    ids = await list_all_player_ids()
+    if not ids:
+        await interaction.response.send_message("❌ Não há jogadores cadastrados.", ephemeral=True)
+        return
+
+    afetados = 0
+    for uid in ids:
+        if uid == exceto.id:
+            continue
+        p = await get_player(uid)
+        if not p:
+            continue
+        p["gold"] = int(p.get("gold", 0)) + quantidade
+        await save_player(p)
+        afetados += 1
+
+    await interaction.response.send_message(
+        f"✅ Gold {quantidade:+d} aplicado em {afetados} jogador(es), exceto {exceto.mention}.",
+        ephemeral=True
+    )
+
+async def _x1_execute_round(attacker: dict, defender: dict, attacker_name: str, defender_name: str, defender_limit_hp: int) -> str:
+    atk_roll = rolar_d20()
+    atk_stat = await total_stat(attacker, "atk")
+    def_stat = await total_stat(defender, "defesa")
+    atk_total = atk_roll + atk_stat
+    def_total = 10 + def_stat
+
+    if atk_total < def_total:
+        return f"{attacker_name} errou ({atk_total} vs {def_total})."
+
+    dano = max(1, random.randint(1, 8) + atk_stat - def_stat)
+    if atk_roll == 20:
+        dano *= 2
+
+    novo_hp = int(defender["hp"]) - dano
+    defender["hp"] = max(defender_limit_hp, novo_hp)
+    crit_txt = " 💥 CRÍTICO!" if atk_roll == 20 else ""
+    return f"{attacker_name} acertou {defender_name} por **{dano}** de dano.{crit_txt} (HP {defender_name}: {defender['hp']})"
+
+async def _x1_run_duel(channel: discord.abc.Messageable, challenger_id: int, target_id: int):
+    p1 = await get_player(challenger_id)
+    p2 = await get_player(target_id)
+    if not p1 or not p2:
+        await channel.send("❌ X1 cancelado: um dos jogadores não possui personagem.")
+        async with X1_LOCK:
+            X1_ATIVOS.pop(challenger_id, None)
+            X1_ATIVOS.pop(target_id, None)
+        return
+
+    n1 = f"<@{challenger_id}>"
+    n2 = f"<@{target_id}>"
+    hp1_inicial = int(p1["hp"])
+    hp2_inicial = int(p2["hp"])
+    hp1_limite = max(1, int(hp1_inicial * 0.05))
+    hp2_limite = max(1, int(hp2_inicial * 0.05))
+
+    rodada = 1
+    while int(p1["hp"]) > hp1_limite and int(p2["hp"]) > hp2_limite:
+        ini1 = rolar_d20() + await total_stat(p1, "destreza")
+        ini2 = rolar_d20() + await total_stat(p2, "destreza")
+
+        if ini1 >= ini2:
+            first = (p1, p2, n1, n2, hp2_limite)
+            second = (p2, p1, n2, n1, hp1_limite)
+        else:
+            first = (p2, p1, n2, n1, hp1_limite)
+            second = (p1, p2, n1, n2, hp2_limite)
+
+        log1 = await _x1_execute_round(*first)
+        if int(p1["hp"]) <= hp1_limite or int(p2["hp"]) <= hp2_limite:
+            await channel.send(f"🎲 Rodada {rodada}: {log1}")
+            break
+
+        log2 = await _x1_execute_round(*second)
+        await channel.send(f"🎲 Rodada {rodada}: {log1}\n{log2}")
+        rodada += 1
+
+    if int(p1["hp"]) <= hp1_limite:
+        vencedor, perdedor = p2, p1
+        vencedor_id, perdedor_id = target_id, challenger_id
+    else:
+        vencedor, perdedor = p1, p2
+        vencedor_id, perdedor_id = challenger_id, target_id
+
+    gold_perdedor = int(perdedor.get("gold", 0))
+    gold_transferido = int(gold_perdedor * 0.30)
+    if gold_transferido == 0 and gold_perdedor > 0:
+        gold_transferido = 1
+
+    perdedor["gold"] = max(0, gold_perdedor - gold_transferido)
+    vencedor["gold"] = int(vencedor.get("gold", 0)) + gold_transferido
+
+    await save_player(vencedor)
+    await save_player(perdedor)
+
+    await channel.send(
+        f"🏆 Vencedor: <@{vencedor_id}>\n"
+        f"😵 Perdedor: <@{perdedor_id}>\n"
+        f"💰 Transferência: **{gold_transferido}** gold."
+    )
+
+    async with X1_LOCK:
+        X1_ATIVOS.pop(challenger_id, None)
+        X1_ATIVOS.pop(target_id, None)
+
+@tree.command(name="x1", description="Desafiar outro jogador para um X1 por turnos.")
+async def x1_cmd(interaction: discord.Interaction, jogador: discord.Member):
+    if not await ensure_x1_arena_channel(interaction):
+        return
+    if jogador.bot:
+        await interaction.response.send_message("❌ Você não pode desafiar um bot.", ephemeral=True)
+        return
+    if jogador.id == interaction.user.id:
+        await interaction.response.send_message("❌ Você não pode se desafiar.", ephemeral=True)
+        return
+
+    p_challenger = await get_player(interaction.user.id)
+    p_target = await get_player(jogador.id)
+    if not p_challenger or not p_target:
+        await interaction.response.send_message("❌ Ambos os jogadores precisam ter personagem.", ephemeral=True)
+        return
+
+    async with X1_LOCK:
+        if x1_user_busy(interaction.user.id) or x1_user_busy(jogador.id):
+            await interaction.response.send_message("❌ Um dos jogadores já está em outro X1.", ephemeral=True)
+            return
+
+        X1_PENDENTES[jogador.id] = {
+            "challenger_id": interaction.user.id,
+            "target_id": jogador.id,
+            "channel_id": interaction.channel_id,
+            "created_at": now_ts(),
+        }
+
+    await interaction.response.send_message(
+        f"⚔️ {interaction.user.display_name} desafiou {jogador.display_name} para um X1. "
+        f"{jogador.display_name}, use /aceitarx1 ou /recusarx1.",
+        ephemeral=False
+    )
+
+@tree.command(name="aceitarx1", description="Aceitar um desafio de X1 pendente.")
+async def aceitarx1_cmd(interaction: discord.Interaction):
+    if not await ensure_x1_arena_channel(interaction):
+        return
+
+    async with X1_LOCK:
+        pend = X1_PENDENTES.get(interaction.user.id)
+        if not pend:
+            await interaction.response.send_message("❌ Você não tem desafio pendente.", ephemeral=True)
+            return
+
+        challenger_id = pend["challenger_id"]
+        target_id = pend["target_id"]
+
+        if interaction.user.id != target_id:
+            await interaction.response.send_message("❌ Apenas o desafiado pode aceitar.", ephemeral=True)
+            return
+
+        if challenger_id in X1_ATIVOS or target_id in X1_ATIVOS:
+            X1_PENDENTES.pop(interaction.user.id, None)
+            await interaction.response.send_message("❌ Esse desafio não está mais disponível.", ephemeral=True)
+            return
+
+        X1_PENDENTES.pop(interaction.user.id, None)
+        X1_ATIVOS[challenger_id] = {"opponent_id": target_id}
+        X1_ATIVOS[target_id] = {"opponent_id": challenger_id}
+
+    await interaction.response.send_message("✅ Desafio aceito. O duelo começou.", ephemeral=False)
+    asyncio.create_task(_x1_run_duel(interaction.channel, challenger_id, target_id))
+
+@tree.command(name="recusarx1", description="Recusar um desafio de X1 pendente.")
+async def recusarx1_cmd(interaction: discord.Interaction):
+    if not await ensure_x1_arena_channel(interaction):
+        return
+
+    async with X1_LOCK:
+        pend = X1_PENDENTES.get(interaction.user.id)
+        if not pend:
+            await interaction.response.send_message("❌ Você não tem desafio pendente.", ephemeral=True)
+            return
+        if pend["target_id"] != interaction.user.id:
+            await interaction.response.send_message("❌ Apenas o desafiado pode recusar.", ephemeral=True)
+            return
+
+        X1_PENDENTES.pop(interaction.user.id, None)
+        challenger_id = pend["challenger_id"]
+
+    await interaction.response.send_message(
+        f"🛑 <@{interaction.user.id}> recusou o desafio de <@{challenger_id}>.",
+        ephemeral=False
+    )
+
+@tree.command(name="cancelarx1", description="Cancelar um desafio de X1 ainda não iniciado.")
+async def cancelarx1_cmd(interaction: discord.Interaction):
+    if not await ensure_x1_arena_channel(interaction):
+        return
+
+    async with X1_LOCK:
+        pend_target = None
+        for target_id, pend in X1_PENDENTES.items():
+            if pend["challenger_id"] == interaction.user.id:
+                pend_target = target_id
+                break
+
+        if pend_target is None:
+            await interaction.response.send_message("❌ Você não tem desafio pendente para cancelar.", ephemeral=True)
+            return
+
+        X1_PENDENTES.pop(pend_target, None)
+
+    await interaction.response.send_message("✅ Seu desafio pendente foi cancelado.", ephemeral=True)
+
+@tree.command(name="statusx1", description="Ver seu status atual no sistema de X1.")
+async def statusx1_cmd(interaction: discord.Interaction):
+    if not await ensure_x1_arena_channel(interaction):
+        return
+    await interaction.response.send_message(x1_duel_status_text(interaction.user.id), ephemeral=True)
+
+
 async def list_all_player_ids() -> List[int]:
     async with aiosqlite.connect(DB_FILE) as db:
         cur = await db.execute("SELECT user_id FROM players")
@@ -2159,6 +2545,29 @@ async def list_all_player_ids() -> List[int]:
 # [REMOVIDO DUPLICADO] command 'spell_ativar'
 
 # [REMOVIDO DUPLICADO] command 'magia_criar'
+
+
+@client.event
+async def on_ready():
+    global _COMMANDS_SYNCED
+    if _COMMANDS_SYNCED:
+        return
+
+    _COMMANDS_SYNCED = True
+    try:
+        if GUILD_ID:
+            guild_obj = discord.Object(id=GUILD_ID)
+            tree.copy_global_to(guild=guild_obj)
+            synced = await tree.sync(guild=guild_obj)
+            print(f"✅ Slash commands sincronizados na guild {GUILD_ID}: {len(synced)}")
+        else:
+            synced = await tree.sync()
+            print(f"✅ Slash commands sincronizados globalmente: {len(synced)}")
+    except Exception as e:
+        print(f"❌ Falha ao sincronizar slash commands: {e}")
+
+    print(f"🤖 Bot online como {client.user}")
+
 
 # ==============================
 # RUN
