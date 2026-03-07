@@ -5,6 +5,7 @@ import time
 import json
 import math
 import random
+from collections import Counter
 from pathlib import Path
 import re
 import aiosqlite
@@ -2220,50 +2221,81 @@ def _fmt_list(items: Any) -> str:
     return ", ".join([str(x) for x in items])
 
 
-def build_profile_embed(p: dict, owner_name: str, owner_mention: str) -> discord.Embed:
+async def build_profile_embed(p: dict, owner_name: str, owner_mention: str) -> discord.Embed:
     stats = p.get("stats") or {}
     equipado = ensure_equipado_format(p.get("equipado") or {})
     spellbook = p.get("spellbook") or []
+    level = int(p.get("level", 1))
+    xp_atual = int(p.get("xp", 0))
+    xp_next = int(xp_para_upar(level))
+
+    base_atk = int(stats.get("atk", 0))
+    base_def = int(stats.get("defesa", 0))
+    base_mag = int(stats.get("magia", 0))
+    base_dex = int(stats.get("destreza", 0))
+    base_sorte = int(stats.get("sorte", 0))
+    base_furt = int(stats.get("furtividade", 0))
+
+    total_atk = await total_stat(p, "atk")
+    total_def = await total_stat(p, "defesa")
+    total_mag = await total_stat(p, "magia")
+    total_dex = await total_stat(p, "destreza")
+    total_sorte = await total_stat(p, "sorte")
+    total_furt = await total_stat(p, "furtividade")
 
     embed = discord.Embed(
-        title=f"📜 Ficha de {owner_name}",
+        title=f"👤 Perfil — {owner_name}",
         description=f"Jogador: {owner_mention}",
         color=discord.Color.blurple()
     )
 
+    embed.add_field(name="Classe", value=str(p.get("classe", "—")).capitalize(), inline=True)
+    embed.add_field(name="Nível", value=f"{level} (XP {xp_atual}/{xp_next})", inline=True)
+    embed.add_field(name="Gold", value=f"💰 {int(p.get('gold', 0))}", inline=True)
+
     embed.add_field(
-        name="🧩 Básico",
+        name="Status",
         value=(
-            f"Classe: **{str(p.get('classe', '—')).upper()}**\n"
-            f"Nível: **{int(p.get('level', 1))}**\n"
-            f"XP: **{int(p.get('xp', 0))}**\n"
-            f"Gold: **{int(p.get('gold', 0))}**\n"
-            f"HP: **{int(p.get('hp', 0))}**\n"
-            f"Mana: **{int(p.get('mana', 0))}**\n"
-            f"Stamina: **{int(p.get('stamina', 0))}/{int(p.get('max_stamina', STAMINA_MAX))}**\n"
-            f"Pontos livres: **{int(p.get('pontos', 0))}**"
+            f"❤️ HP: {int(p.get('hp', 0))}\n"
+            f"🔵 Mana: {int(p.get('mana', 0))}\n"
+            f"🥵 Stamina: {int(p.get('stamina', 0))}/{int(p.get('max_stamina', STAMINA_MAX))}\n"
+            f"⭐ Pontos pendentes: {int(p.get('pontos', 0))}"
         ),
         inline=False
     )
 
-    if stats:
-        ordered = ["atk", "magia", "defesa", "sorte", "furtividade", "destreza"]
-        shown = set()
-        lines = []
-        for k in ordered:
-            if k in stats:
-                lines.append(f"{k.upper()}: **{stats[k]}**")
-                shown.add(k)
-        for k in sorted(stats.keys()):
-            if k in shown:
-                continue
-            lines.append(f"{k.upper()}: **{stats[k]}**")
-        embed.add_field(name="📊 Atributos", value="\n".join(lines) if lines else "—", inline=False)
+    embed.add_field(
+        name="Atributos (com bônus)",
+        value=(
+            f"⚔️ ATK: {total_atk} ({base_atk:+d} base, {total_atk - base_atk:+d} bônus)\n"
+            f"🛡️ DEF: {total_def} ({base_def:+d} base, {total_def - base_def:+d} bônus)\n"
+            f"✨ MAG: {total_mag} ({base_mag:+d} base, {total_mag - base_mag:+d} bônus)\n"
+            f"🎯 DEX: {total_dex} ({base_dex:+d} base, {total_dex - base_dex:+d} bônus)\n"
+            f"🍀 SORTE: {total_sorte} ({base_sorte:+d} base, {total_sorte - base_sorte:+d} bônus)\n"
+            f"🥷 FURT: {total_furt} ({base_furt:+d} base, {total_furt - base_furt:+d} bônus)"
+        ),
+        inline=False
+    )
 
-    slots = ["arma", "armadura", "elmo", "botas", "luvas", "cajado", "especial", "implante", "livro_magias"]
-    eq_lines = [f"{s}: **{equipado.get(s) or '—'}**" for s in slots]
-    eq_lines.append(f"aneis: **{_fmt_list(equipado.get('aneis'))}**")
-    embed.add_field(name="🛡️ Equipamentos", value="\n".join(eq_lines), inline=False)
+    eq_lines = [
+        f"🗡️ Arma: {equipado.get('arma') or '—'}",
+        f"🛡️ Armadura: {equipado.get('armadura') or '—'}",
+        f"🪖 Elmo: {equipado.get('elmo') or '—'}",
+        f"👢 Botas: {equipado.get('botas') or '—'}",
+        f"🧤 Luvas: {equipado.get('luvas') or '—'}",
+        f"🔮 Cajado: {equipado.get('cajado') or '—'}",
+        f"🧩 Especial: {equipado.get('especial') or '—'}",
+        f"🧬 Implante: {equipado.get('implante') or '—'}",
+        f"📖 Livro (item): {equipado.get('livro_magias') or '—'}",
+    ]
+    embed.add_field(name="Equipado (IDs)", value="\n".join(eq_lines), inline=False)
+
+    aneis = list(equipado.get("aneis") or [])
+    while len(aneis) < 8:
+        aneis.append(None)
+    aneis = aneis[:8]
+    aneis_lines = [f"{i+1}. {aneis[i] or '—'}" for i in range(8)]
+    embed.add_field(name="💍 Anéis (1-8)", value="\n".join(aneis_lines), inline=False)
 
     embed.add_field(name="✨ Spellbook", value=_fmt_list(spellbook), inline=False)
 
@@ -2286,8 +2318,53 @@ async def perfil_cmd(interaction: discord.Interaction):
     if not p:
         await interaction.response.send_message("⚠️ Você ainda não tem personagem. Use /start.", ephemeral=True)
         return
-    embed = build_profile_embed(p, interaction.user.display_name, interaction.user.mention)
+    embed = await build_profile_embed(p, interaction.user.display_name, interaction.user.mention)
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@tree.command(name="bau", description="Ver itens guardados (não equipados).")
+async def bau_cmd(interaction: discord.Interaction):
+    p = await require_player(interaction)
+    if not p:
+        return
+
+    inv = [str(i) for i in (p.get("inventario") or []) if i]
+    if not inv:
+        await interaction.response.send_message(f"📦 Baú de {interaction.user.display_name}\n\n(sem itens guardados)", ephemeral=True)
+        return
+
+    eq = ensure_equipado_format(p.get("equipado") or {})
+    equipped_ids = set()
+    for slot in ["arma", "armadura", "elmo", "botas", "luvas", "cajado", "especial", "implante", "livro_magias"]:
+        iid = eq.get(slot)
+        if iid:
+            equipped_ids.add(str(iid))
+    for iid in (eq.get("aneis") or []):
+        if iid:
+            equipped_ids.add(str(iid))
+
+    guardados = [iid for iid in inv if iid not in equipped_ids]
+    if not guardados:
+        await interaction.response.send_message(f"📦 Baú de {interaction.user.display_name}\n\n(sem itens não equipados)", ephemeral=True)
+        return
+
+    counts = Counter(guardados)
+    lines = []
+    for item_id, qtd in sorted(counts.items()):
+        it = await item_get(item_id)
+        nome = (it or {}).get("nome") if it else None
+        if nome:
+            line = f"• {nome} (`{item_id}`)"
+        else:
+            line = f"• {item_id}"
+        if qtd > 1:
+            line += f" x{qtd}"
+        lines.append(line)
+
+    await interaction.response.send_message(
+        f"📦 Baú de {interaction.user.display_name}\n\n" + "\n".join(lines[:60]),
+        ephemeral=True
+    )
 
 
 # Loja
@@ -2592,7 +2669,7 @@ async def mstatus_cmd(interaction: discord.Interaction, jogador: discord.Member)
     if not p:
         await interaction.response.send_message("❌ Esse jogador não possui personagem.", ephemeral=True)
         return
-    embed = build_profile_embed(p, jogador.display_name, jogador.mention)
+    embed = await build_profile_embed(p, jogador.display_name, jogador.mention)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
