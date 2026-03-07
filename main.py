@@ -16,6 +16,7 @@ if not TOKEN:
     raise SystemExit("❌ TOKEN não encontrado. Defina a variável de ambiente TOKEN no Railway e redeploy.")
 
 
+GUILD_ID = int(os.getenv("GUILD_ID", "0") or 0)
 MESTRE_ID = 1255256495369748573  # Cannabinoide
 
 # Canais (IDs fornecidos por você)
@@ -3734,6 +3735,22 @@ async def mstatus(interaction: discord.Interaction, membro: discord.Member):
         ephemeral=True
     )
 
+@tree.command(name="sync", description="(Mestre) Sincronizar comandos slash neste servidor.")
+@only_master_channel()
+async def sync_cmd(interaction: discord.Interaction):
+    try:
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            tree.clear_commands(guild=guild)
+            tree.copy_global_to(guild=guild)
+            synced = await tree.sync(guild=guild)
+            await interaction.response.send_message(f"✅ Sync local concluído: **{len(synced)}** comandos.", ephemeral=True)
+        else:
+            synced = await tree.sync()
+            await interaction.response.send_message(f"✅ Sync global concluído: **{len(synced)}** comandos.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Falha no sync: `{type(e).__name__}: {e}`", ephemeral=True)
+
 # ==============================
 # READY
 # ==============================
@@ -3743,9 +3760,17 @@ async def on_ready():
     await init_db()
     await seed_initial_data()
     try:
-        await tree.sync()
-    except Exception:
-        pass
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            tree.clear_commands(guild=guild)
+            tree.copy_global_to(guild=guild)
+            synced = await tree.sync(guild=guild)
+            print(f"✅ Sync local concluído: {len(synced)} comandos no guild {GUILD_ID}")
+        else:
+            synced = await tree.sync()
+            print(f"✅ Sync global concluído: {len(synced)} comandos")
+    except Exception as e:
+        print(f"❌ Erro ao sincronizar comandos: {type(e).__name__}: {e}")
     print(f"👁️ VIGILLANT ONLINE: {client.user}")
 
 # ==============================
