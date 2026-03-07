@@ -1978,6 +1978,31 @@ class ClasseView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(ClasseSelect())
 
+
+@tree.command(name="spaw", description="(Mestre) Criar personagem para outro jogador.")
+@only_master_channel()
+async def spaw_cmd(interaction: discord.Interaction, jogador: discord.Member, classe: str):
+    classe_key = (classe or "").strip().lower()
+    if classe_key not in CLASSES:
+        validas = ", ".join(sorted([c.upper() for c in CLASSES.keys()]))
+        await interaction.response.send_message(
+            f"❌ Classe inválida. Use uma destas: {validas}.",
+            ephemeral=True
+        )
+        return
+
+    existente = await get_player(jogador.id)
+    if existente:
+        await interaction.response.send_message("❌ Esse jogador já possui personagem.", ephemeral=True)
+        return
+
+    novo = build_new_player(jogador.id, classe_key)
+    await save_player(novo)
+    await interaction.response.send_message(
+        f"✅ Personagem criado para {jogador.mention}: {classe_key.upper()} nível 1.",
+        ephemeral=True
+    )
+
 # ==============================
 # LOJA PAGINADA (DB)
 # ==============================
@@ -2140,6 +2165,113 @@ class BandidosView(discord.ui.View):
 # /CACAR — D20 AUTOMÁTICO
 # ==============================
 
+def pick_weighted_monster() -> Dict[str, Any]:
+    entries = list(MONSTROS.values())
+    pesos = [max(1, int(e.get("peso", 1))) for e in entries]
+    return random.choices(entries, weights=pesos, k=1)[0]
+
+
+@tree.command(name="cacar", description="Sair para caçar criaturas nas ruínas.")
+@only_channel(CANAL_CACAR_ID, "cacar")
+async def cacar_cmd(interaction: discord.Interaction):
+    p = await require_player(interaction)
+    if not p:
+        return
+    if await blocked_by_rest(interaction, p):
+        return
+    if await blocked_by_narration(interaction):
+        return
+
+    agora = now_ts()
+    restante_cd = int(p.get("last_hunt_ts", 0)) + CACAR_COOLDOWN_S - agora
+    if restante_cd > 0:
+        await interaction.response.send_message(
+            f"⏳ Aguarde **{restante_cd}s** para caçar novamente.",
+            ephemeral=True,
+        )
+        return
+
+    stamina = int(p.get("stamina", STAMINA_MAX))
+    if stamina < STAMINA_CUSTO_CACAR:
+        await interaction.response.send_message(
+            f"🥵 Stamina insuficiente. Precisa de **{STAMINA_CUSTO_CACAR}** (atual: {stamina}).",
+            ephemeral=True,
+        )
+        return
+
+    p["stamina"] = max(0, stamina - STAMINA_CUSTO_CACAR)
+    p["last_hunt_ts"] = agora
+
+    if random.random() < INIMIGOS_FRACOS_CHANCE:
+        inimigo = random.choice(INIMIGOS_FRACOS)
+        xp = random.randint(*inimigo["xp"])
+        gold = random.randint(*inimigo["gold"])
+        p["xp"] = int(p.get("xp", 0)) + xp
+        p["gold"] = int(p.get("gold", 0)) + gold
+
+        drop_txt = ""
+        if random.random() < DROP_FRACO_CHANCE:
+            drop = await pick_drop_from_pool(DROP_POOL_FRACO)
+            if drop:
+                p.setdefault("inventario", []).append(drop["item_id"])
+                drop_txt = f"\n🎁 Drop: **{drop['nome']}** (`{drop['item_id']}`)"
+
+        upou = await try_auto_level(p)
+        await save_player(p)
+        await interaction.response.send_message(
+            f"🏹 Você caçou **{inimigo['nome']}** com facilidade!\n"
+            f"✨ +{xp} XP | 💰 +{gold} Gold\n"
+            f"⚡ Stamina: **{p['stamina']}**/{p.get('max_stamina', STAMINA_MAX)}"
+            + (f"\n🆙 UPOU {upou} nível(is)!" if upou else "")
+            + drop_txt,
+            ephemeral=False,
+        )
+        return
+
+    monstro = pick_weighted_monster()
+    atk_total = await total_stat(p, "atk")
+    defesa_total = await total_stat(p, "defesa")
+
+    dano_jogador = max(1, random.randint(1, 8) + atk_total - 3)
+    dano_monstro = max(1, random.randint(1, 6) + int(monstro.get("atk", 1)) - (defesa_total // 2))
+    hp_monstro = max(0, int(monstro.get("hp", 1)) - dano_jogador)
+
+    venceu = hp_monstro == 0 or random.random() < 0.55
+    if venceu:
+        xp = int(monstro.get("xp", 10))
+        gold = int(monstro.get("gold", 8))
+        p["xp"] = int(p.get("xp", 0)) + xp
+        p["gold"] = int(p.get("gold", 0)) + gold
+
+        drop_txt = ""
+        if random.random() < DROP_RARO_CHANCE:
+            drop = await pick_drop_from_pool(DROP_POOL_RARO)
+            if drop:
+                p.setdefault("inventario", []).append(drop["item_id"])
+                drop_txt = f"\n🎁 Drop raro: **{drop['nome']}** (`{drop['item_id']}`)"
+
+        upou = await try_auto_level(p)
+        await save_player(p)
+        await interaction.response.send_message(
+            f"⚔️ Você venceu **{monstro['nome']}**!\n"
+            f"🩸 Seu dano: **{dano_jogador}**\n"
+            f"✨ +{xp} XP | 💰 +{gold} Gold\n"
+            f"⚡ Stamina: **{p['stamina']}**/{p.get('max_stamina', STAMINA_MAX)}"
+            + (f"\n🆙 UPOU {upou} nível(is)!" if upou else "")
+            + drop_txt,
+            ephemeral=False,
+        )
+    else:
+        p["hp"] = max(1, int(p.get("hp", 1)) - dano_monstro)
+        await save_player(p)
+        await interaction.response.send_message(
+            f"💥 Você foi ferido por **{monstro['nome']}** e recuou.\n"
+            f"🩸 Dano recebido: **{dano_monstro}**\n"
+            f"❤ HP atual: **{p['hp']}**\n"
+            f"⚡ Stamina: **{p['stamina']}**/{p.get('max_stamina', STAMINA_MAX)}",
+            ephemeral=False,
+        )
+
 
 # ==============================
 # COMANDOS — MESTRE
@@ -2154,6 +2286,111 @@ async def list_all_player_ids() -> List[int]:
         cur = await db.execute("SELECT user_id FROM players")
         rows = await cur.fetchall()
         return [int(r[0]) for r in rows]
+
+
+@tree.command(name="darxp", description="(Mestre) Dar XP para 1 jogador.")
+@only_master_channel()
+async def darxp_cmd(interaction: discord.Interaction, jogador: str, quantidade: int):
+    if quantidade == 0:
+        await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
+        return
+
+    jogador_raw = (jogador or "").strip()
+    if jogador_raw.lower() == "all":
+        ids = await list_all_player_ids()
+        if not ids:
+            await interaction.response.send_message("❌ Não há jogadores cadastrados.", ephemeral=True)
+            return
+
+        afetados = 0
+        for pid in ids:
+            p = await get_player(pid)
+            if not p:
+                continue
+            p["xp"] = int(p.get("xp", 0)) + quantidade
+            await try_auto_level(p)
+            await save_player(p)
+            afetados += 1
+
+        await interaction.response.send_message(
+            f"✅ XP {quantidade:+d} aplicado em {afetados} jogador(es).",
+            ephemeral=True
+        )
+        return
+
+    m = re.fullmatch(r"<@!?(\d+)>", jogador_raw)
+    if m:
+        target_id = int(m.group(1))
+    elif jogador_raw.isdigit():
+        target_id = int(jogador_raw)
+    else:
+        await interaction.response.send_message("❌ Use 'all', uma menção válida ou um ID de usuário.", ephemeral=True)
+        return
+
+    p = await get_player(target_id)
+    if not p:
+        await interaction.response.send_message("❌ Esse jogador não tem personagem.", ephemeral=True)
+        return
+
+    p["xp"] = int(p.get("xp", 0)) + quantidade
+    upou = await try_auto_level(p)
+    await save_player(p)
+    await interaction.response.send_message(
+        f"✅ XP atualizado para <@{target_id}>: {quantidade:+d}."
+        + (f" 🆙 Subiu {upou} nível(is)." if upou else ""),
+        ephemeral=True
+    )
+
+
+@tree.command(name="dargold", description="(Mestre) Dar gold para 1 jogador.")
+@only_master_channel()
+async def dargold_cmd(interaction: discord.Interaction, jogador: str, quantidade: int):
+    if quantidade == 0:
+        await interaction.response.send_message("❌ A quantidade deve ser diferente de 0.", ephemeral=True)
+        return
+
+    jogador_raw = (jogador or "").strip()
+    if jogador_raw.lower() == "all":
+        ids = await list_all_player_ids()
+        if not ids:
+            await interaction.response.send_message("❌ Não há jogadores cadastrados.", ephemeral=True)
+            return
+
+        afetados = 0
+        for pid in ids:
+            p = await get_player(pid)
+            if not p:
+                continue
+            p["gold"] = int(p.get("gold", 0)) + quantidade
+            await save_player(p)
+            afetados += 1
+
+        await interaction.response.send_message(
+            f"✅ Gold {quantidade:+d} aplicado em {afetados} jogador(es).",
+            ephemeral=True
+        )
+        return
+
+    m = re.fullmatch(r"<@!?(\d+)>", jogador_raw)
+    if m:
+        target_id = int(m.group(1))
+    elif jogador_raw.isdigit():
+        target_id = int(jogador_raw)
+    else:
+        await interaction.response.send_message("❌ Use 'all', uma menção válida ou um ID de usuário.", ephemeral=True)
+        return
+
+    p = await get_player(target_id)
+    if not p:
+        await interaction.response.send_message("❌ Esse jogador não tem personagem.", ephemeral=True)
+        return
+
+    p["gold"] = int(p.get("gold", 0)) + quantidade
+    await save_player(p)
+    await interaction.response.send_message(
+        f"✅ Gold atualizado para <@{target_id}>: {quantidade:+d}.",
+        ephemeral=True
+    )
 
 
 # [REMOVIDO DUPLICADO] command 'spell_ativar'
