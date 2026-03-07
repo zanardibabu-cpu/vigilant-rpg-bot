@@ -63,6 +63,8 @@ DESCANSO_HORAS = 12
 # Lojas válidas (definidas cedo para evitar NameError em runtime)
 LOJAS_VALIDAS = {"mercador", "ferreiro", "alfaiate", "arcano", "igreja", "armaduras"}
 ALBERGUE_MAX_CUSTO = 50
+ALBERGUE_CUSTO_FIXO = 150
+ALBERGUE_DESCANSO_HORAS = 2
 
 # XP
 XP_BASE = 100
@@ -2169,6 +2171,43 @@ class BandidosView(discord.ui.View):
 # Trade
 
 # Descansar / Albergue
+@tree.command(name="albergue", description="Hospedar-se no albergue para descansar (2h).")
+async def albergue_cmd(interaction: discord.Interaction):
+    p = await require_player(interaction)
+    if not p:
+        return
+
+    agora = now_ts()
+    rest_until = int(p.get("rest_until_ts", 0))
+    if agora < rest_until:
+        falta = rest_until - agora
+        horas = falta // 3600
+        minutos = (falta % 3600) // 60
+        await interaction.response.send_message(
+            f"⛺ Você já está descansando. Volte em aproximadamente {horas}h {minutos:02d}min.",
+            ephemeral=True,
+        )
+        return
+
+    if int(p.get("gold", 0)) < ALBERGUE_CUSTO_FIXO:
+        await interaction.response.send_message(
+            "❌ Você precisa de 150 gold para se hospedar no albergue.",
+            ephemeral=True,
+        )
+        return
+
+    p["gold"] = int(p.get("gold", 0)) - ALBERGUE_CUSTO_FIXO
+    p["rest_until_ts"] = agora + (ALBERGUE_DESCANSO_HORAS * 3600)
+    p["stamina"] = int(p.get("max_stamina", STAMINA_MAX))
+    await save_player(p)
+
+    await interaction.response.send_message(
+        "🛏️ Você se hospedou no albergue.\n"
+        "💰 -150 gold\n"
+        "⚡ Stamina totalmente restaurada.\n"
+        "⏳ Você ficará descansando por 2 horas.",
+        ephemeral=False,
+    )
 
 # ==============================
 # MAGIAS (Jogador) — Livro de Magias
