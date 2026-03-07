@@ -2163,6 +2163,81 @@ class BandidosView(discord.ui.View):
 # COMANDOS — JOGADOR
 # ==============================
 
+def _fmt_list(items: Any) -> str:
+    if not isinstance(items, list) or not items:
+        return "—"
+    return ", ".join([str(x) for x in items])
+
+
+def build_profile_embed(p: dict, owner_name: str, owner_mention: str) -> discord.Embed:
+    stats = p.get("stats") or {}
+    equipado = ensure_equipado_format(p.get("equipado") or {})
+    spellbook = p.get("spellbook") or []
+
+    embed = discord.Embed(
+        title=f"📜 Ficha de {owner_name}",
+        description=f"Jogador: {owner_mention}",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="🧩 Básico",
+        value=(
+            f"Classe: **{str(p.get('classe', '—')).upper()}**\n"
+            f"Nível: **{int(p.get('level', 1))}**\n"
+            f"XP: **{int(p.get('xp', 0))}**\n"
+            f"Gold: **{int(p.get('gold', 0))}**\n"
+            f"HP: **{int(p.get('hp', 0))}**\n"
+            f"Mana: **{int(p.get('mana', 0))}**\n"
+            f"Stamina: **{int(p.get('stamina', 0))}/{int(p.get('max_stamina', STAMINA_MAX))}**\n"
+            f"Pontos livres: **{int(p.get('pontos', 0))}**"
+        ),
+        inline=False
+    )
+
+    if stats:
+        ordered = ["atk", "magia", "defesa", "sorte", "furtividade", "destreza"]
+        shown = set()
+        lines = []
+        for k in ordered:
+            if k in stats:
+                lines.append(f"{k.upper()}: **{stats[k]}**")
+                shown.add(k)
+        for k in sorted(stats.keys()):
+            if k in shown:
+                continue
+            lines.append(f"{k.upper()}: **{stats[k]}**")
+        embed.add_field(name="📊 Atributos", value="\n".join(lines) if lines else "—", inline=False)
+
+    slots = ["arma", "armadura", "elmo", "botas", "luvas", "cajado", "especial", "implante", "livro_magias"]
+    eq_lines = [f"{s}: **{equipado.get(s) or '—'}**" for s in slots]
+    eq_lines.append(f"aneis: **{_fmt_list(equipado.get('aneis'))}**")
+    embed.add_field(name="🛡️ Equipamentos", value="\n".join(eq_lines), inline=False)
+
+    embed.add_field(name="✨ Spellbook", value=_fmt_list(spellbook), inline=False)
+
+    extras = []
+    for k in ["especializacao", "perks", "sanidade", "corrupcao", "regiao", "regiao_atual"]:
+        if k in p and p.get(k) not in (None, "", [], {}):
+            val = p.get(k)
+            if isinstance(val, list):
+                val = _fmt_list(val)
+            extras.append(f"{k}: **{val}**")
+    if extras:
+        embed.add_field(name="🧠 Extras", value="\n".join(extras), inline=False)
+
+    return embed
+
+
+@tree.command(name="perfil", description="Ver sua ficha atual.")
+async def perfil_cmd(interaction: discord.Interaction):
+    p = await get_player(interaction.user.id)
+    if not p:
+        await interaction.response.send_message("⚠️ Você ainda não tem personagem. Use /start.", ephemeral=True)
+        return
+    embed = build_profile_embed(p, interaction.user.display_name, interaction.user.mention)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 # Loja
 
@@ -2458,6 +2533,16 @@ async def cacar_cmd(interaction: discord.Interaction):
 # COMANDOS — MESTRE
 # ==============================
 
+@tree.command(name="mstatus", description="(Mestre) Ver ficha de um jogador.")
+@only_master_channel()
+@app_commands.describe(jogador="Jogador alvo")
+async def mstatus_cmd(interaction: discord.Interaction, jogador: discord.Member):
+    p = await get_player(jogador.id)
+    if not p:
+        await interaction.response.send_message("❌ Esse jogador não possui personagem.", ephemeral=True)
+        return
+    embed = build_profile_embed(p, jogador.display_name, jogador.mention)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------- DAR XP / GOLD (individual / all / todos_exceto)
