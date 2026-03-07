@@ -2021,6 +2021,31 @@ class ClasseView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(ClasseSelect())
 
+
+@tree.command(name="spaw", description="(Mestre) Criar personagem para outro jogador.")
+@only_master_channel()
+async def spaw_cmd(interaction: discord.Interaction, jogador: discord.Member, classe: str):
+    classe_key = (classe or "").strip().lower()
+    if classe_key not in CLASSES:
+        validas = ", ".join(sorted([c.upper() for c in CLASSES.keys()]))
+        await interaction.response.send_message(
+            f"❌ Classe inválida. Use uma destas: {validas}.",
+            ephemeral=True
+        )
+        return
+
+    existente = await get_player(jogador.id)
+    if existente:
+        await interaction.response.send_message("❌ Esse jogador já possui personagem.", ephemeral=True)
+        return
+
+    novo = build_new_player(jogador.id, classe_key)
+    await save_player(novo)
+    await interaction.response.send_message(
+        f"✅ Personagem criado para {jogador.mention}: {classe_key.upper()} nível 1.",
+        ephemeral=True
+    )
+
 # ==============================
 # LOJA PAGINADA (DB)
 # ==============================
