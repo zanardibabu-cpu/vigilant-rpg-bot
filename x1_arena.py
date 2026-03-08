@@ -129,31 +129,55 @@ class ArenaManager:
             mana_max=int(p.get("mana", 0)),
         )
 
-    async def _roll_attack(self, src: FighterState, dst: FighterState, atk_value: float, allow_crit: bool = True, accuracy_mult: float = 1.0, dmg_mult: float = 1.0):
+    async def _roll_attack(
+        self,
+        src: FighterState,
+        dst: FighterState,
+        atk_value: float,
+        allow_crit: bool = True,
+        accuracy_mult: float = 1.0,
+        dmg_mult: float = 1.0,
+        defender_bonus_scale: float = 1.0,
+    ):
         d20 = random.randint(1, 20)
+        if dst.classe == "assassino" and dst.buffs.get("shadow_turns", 0) > 0:
+            return 0, d20, False, "shadow"
         atk_total = int((d20 + atk_value) * accuracy_mult)
-        def_total = 10 + int(dst.flags.get("base_def", 0)) + int(dst.buffs.get("def_turn", 0))
+        def_total = 10 + int(dst.flags.get("base_def", 0)) + int(int(dst.buffs.get("def_turn", 0)) * defender_bonus_scale)
         if atk_total < def_total:
-            return 0, d20, False
+            return 0, d20, False, "miss"
         dano = max(1, int(random.randint(1, 8) + atk_value - (def_total / 2)))
         crit = allow_crit and (d20 == 20 or (src.classe == "assassino" and random.random() < 0.10))
         if crit:
             dano *= 2
         dano = int(dano * dmg_mult)
-        return max(1, dano), d20, crit
+        return max(1, dano), d20, crit, None
 
     async def _resolve_turn(self, match: ArenaMatch):
         logs = [f"⚔ Turno {match.turno_atual} — Resultado"]
+        action_logs = []
+        hp_logs = []
+        cost_logs = []
+        regen_logs = []
+
+        def _hp_limit(f: FighterState) -> int:
+            return max(1, int(f.hp_max * 0.05))
+
+        def _apply_damage(target: FighterState, damage: int) -> int:
+            damage = max(1, int(damage))
+            before = target.hp
+            target.hp = max(_hp_limit(target), target.hp - damage)
+            return max(0, before - target.hp)
         a, b = match.playerA, match.playerB
         for f in (a, b):
             if not f.acao:
                 f.acao = "atacar"
-                logs.append(f"⏱ {f.nome} não escolheu em {TURN_TIMEOUT_S}s: ação automática = Atacar (timeout).")
+                action_logs.append(f"⏱ {f.nome} não escolheu em {TURN_TIMEOUT_S}s: ação automática = Atacar (timeout).")
             f.used_stamina_skill = False
             f.used_mana_skill = False
 
-        logs.append(f"{a.nome} escolheu **{a.acao}**.")
-        logs.append(f"{b.nome} escolheu **{b.acao}**.")
+        action_logs.append(f"{a.nome} escolheu **{a.acao}**.")
+        action_logs.append(f"{b.nome} escolheu **{b.acao}**.")
 
         order = ["render", "defender", "habilidade", "atacar"]
         acted = {a.user_id: False, b.user_id: False}
@@ -161,7 +185,7 @@ class ArenaManager:
         for f in (a, b):
             if f.hp <= int(f.hp_max * 0.4) and f.classe == "barbaro" and not f.flags.get("berserk_activated"):
                 f.flags["berserk_activated"] = True
-                logs.append(f"🔥 {f.nome} ativou Fúria Berserk (dano x2, defesa -50%).")
+                action_logs.append(f"🔥 {f.nome} ativou Fúria Berserk (dano x2, defesa -50%).")
 
         for action in order:
             for src, dst in ((a, b), (b, a)):
@@ -180,18 +204,19 @@ class ArenaManager:
                 dst.flags["base_def"] = dst_base_def
 
                 if src.acao == "render":
-                    src.hp = 0
-                    logs.append(f"🏳 {src.nome} se rendeu.")
+                    src.hp = _hp_limit(src)
+                    action_logs.append(f"🏳 {src.nome} se rendeu.")
                     continue
 
                 if src.acao == "defender":
                     custo = max(1, int(src.stamina_max * 0.20))
                     if src.stamina < custo:
-                        logs.append(f"❌ {src.nome} tentou Defender, mas faltou stamina ({src.stamina}/{custo}).")
+                        action_logs.append(f"❌ {src.nome} tentou Defender, mas faltou stamina ({src.stamina}/{custo}).")
                     else:
                         src.stamina -= custo
-                        src.buffs["def_turn"] = int(dst.flags.get("base_def", 0) * 0.5)
-                        logs.append(f"🛡 {src.nome} defendeu (+50% defesa no turno) e gastou {custo} stamina.")
+                        src.buffs["def_turn"] = int(src.flags.get("base_def", 0) * 0.5)
+                        action_logs.append(f"🛡 {src.nome} escolheu Defender (+50% defesa no turno).")
+                        cost_logs.append(f"🔋 {src.nome} gastou {custo} stamina.")
                         if src.classe == "guerreiro":
                             src.buffs["next_atk_bonus"] = 0.15
                     continue
@@ -200,13 +225,13 @@ class ArenaManager:
                     if src.classe in ("guerreiro", "barbaro"):
                         if src.cooldowns.get("poder", 0) > 0:
                             src.acao = "atacar"
-                            logs.append(f"⌛ {src.nome} está em cooldown de Poder Máximo. Virou ataque básico.")
+                            action_logs.append(f"⌛ {src.nome} está em cooldown de Poder Máximo. Virou ataque básico.")
                             acted[src.user_id] = False
                             continue
                         custo = max(1, int(src.stamina_max * 0.35))
                         if src.stamina < custo:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"❌ {src.nome} sem stamina para Poder Máximo. Virou ataque básico.")
+                            action_logs.append(f"❌ {src.nome} sem stamina para Poder Máximo. Virou ataque básico.")
                             continue
                         src.stamina -= custo
                         src.used_stamina_skill = True
@@ -215,21 +240,28 @@ class ArenaManager:
                         dmg_mult = 1.0 + 0.60
                         if src.flags.get("berserk_activated"):
                             dmg_mult *= 2
-                        logs.append(f"✨ {src.nome} usou Poder Máximo (-{custo} stamina).")
-                        dano, _, crit = await self._roll_attack(src, dst, atk * 1.60, dmg_mult=dmg_mult)
-                        dst.hp = max(0, dst.hp - dano)
-                        logs.append(f"💥 {src.nome} causou {dano} de dano{' (CRÍTICO)' if crit else ''}.")
+                        action_logs.append(f"✨ {src.nome} usou Poder Máximo.")
+                        cost_logs.append(f"🔋 {src.nome} gastou {custo} stamina.")
+                        dano, _, crit, miss_reason = await self._roll_attack(src, dst, atk * 1.60, dmg_mult=dmg_mult, defender_bonus_scale=0.5)
+                        if miss_reason == "shadow":
+                            action_logs.append(f"⚔ {src.nome} atacou, mas {dst.nome} estava oculto nas sombras e evitou o golpe.")
+                        elif miss_reason:
+                            action_logs.append(f"⚔ {src.nome} atacou, mas o golpe foi evitado.")
+                        else:
+                            perdido = _apply_damage(dst, dano)
+                            action_logs.append(f"💥 {src.nome} causou {perdido} de dano{' (CRÍTICO)' if crit else ''}.")
+                            hp_logs.append(f"🩸 {dst.nome} perdeu {perdido} HP.")
                         continue
 
                     if src.classe == "clerigo":
                         if src.cooldowns.get("cura", 0) > 0:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"⌛ {src.nome} está em cooldown de Cura Divina. Virou ataque básico.")
+                            action_logs.append(f"⌛ {src.nome} está em cooldown de Cura Divina. Virou ataque básico.")
                             continue
                         custo = max(1, int(src.mana_max * 0.50))
                         if src.mana < custo:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"❌ {src.nome} sem mana para Cura Divina. Virou ataque básico.")
+                            action_logs.append(f"❌ {src.nome} sem mana para Cura Divina. Virou ataque básico.")
                             continue
                         src.mana -= custo
                         src.used_mana_skill = True
@@ -238,63 +270,85 @@ class ArenaManager:
                         cura = int(cura * 1.15)
                         hp_before = src.hp
                         src.hp = min(src.hp_max, src.hp + cura)
-                        logs.append(f"✨ {src.nome} usou Cura Divina (-{custo} mana) e curou {src.hp - hp_before} HP.")
+                        action_logs.append(f"✨ {src.nome} usou Cura Divina e curou {src.hp - hp_before} HP.")
+                        cost_logs.append(f"🔵 {src.nome} gastou {custo} mana.")
                         continue
 
                     if src.classe == "mago":
                         if src.cooldowns.get("arcano", 0) > 0:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"⌛ {src.nome} está em cooldown de Poder Máximo Arcano. Virou ataque básico.")
+                            action_logs.append(f"⌛ {src.nome} está em cooldown de Poder Máximo Arcano. Virou ataque básico.")
                             continue
                         custo = max(1, int(src.mana_max * 0.50))
                         if src.mana < custo:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"❌ {src.nome} sem mana para Poder Máximo Arcano. Virou ataque básico.")
+                            action_logs.append(f"❌ {src.nome} sem mana para Poder Máximo Arcano. Virou ataque básico.")
                             continue
                         src.mana -= custo
                         src.used_mana_skill = True
                         src.cooldowns["arcano"] = 2
                         src.debuffs["def_down_next"] = 0.20
                         src.buffs["fluxo_next"] = min(0.30, float(src.buffs.get("fluxo_next", 0.0)) + 0.10)
-                        dano, _, crit = await self._roll_attack(src, dst, mag * 1.70, dmg_mult=(1.0 + float(src.buffs.get("fluxo_now", 0.0))))
-                        dst.hp = max(0, dst.hp - dano)
-                        logs.append(f"✨ {src.nome} conjurou Poder Máximo Arcano (-{custo} mana), dano {dano}{' (CRÍTICO)' if crit else ''}.")
+                        cost_logs.append(f"🔵 {src.nome} gastou {custo} mana.")
+                        dano, _, crit, miss_reason = await self._roll_attack(
+                            src,
+                            dst,
+                            mag * 1.70,
+                            dmg_mult=(1.0 + float(src.buffs.get("fluxo_now", 0.0))),
+                            defender_bonus_scale=0.5,
+                        )
+                        if miss_reason == "shadow":
+                            action_logs.append(f"⚔ {src.nome} atacou, mas {dst.nome} estava oculto nas sombras e evitou o golpe.")
+                        elif miss_reason:
+                            action_logs.append(f"⚔ {src.nome} atacou, mas o golpe foi evitado.")
+                        else:
+                            perdido = _apply_damage(dst, dano)
+                            action_logs.append(f"✨ {src.nome} conjurou Poder Máximo Arcano e causou {perdido} de dano{' (CRÍTICO)' if crit else ''}.")
+                            hp_logs.append(f"🩸 {dst.nome} perdeu {perdido} HP.")
                         continue
 
                     if src.classe == "assassino":
                         if src.cooldowns.get("sombras", 0) > 0:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"⌛ {src.nome} está em cooldown de Sombras. Virou ataque básico.")
+                            action_logs.append(f"⌛ {src.nome} está em cooldown de Sombras. Virou ataque básico.")
                             continue
                         custo = max(1, int(src.stamina_max * 0.30))
                         if src.stamina < custo:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"❌ {src.nome} sem stamina para Sombras. Virou ataque básico.")
+                            action_logs.append(f"❌ {src.nome} sem stamina para Sombras. Virou ataque básico.")
                             continue
                         src.stamina -= custo
                         src.used_stamina_skill = True
                         src.cooldowns["sombras"] = 3
                         src.buffs["shadow_turns"] = 2
-                        logs.append(f"✨ {src.nome} ocultou-se nas sombras por 2 turnos (-{custo} stamina).")
+                        action_logs.append(f"✨ {src.nome} ocultou-se nas sombras por 2 turnos.")
+                        cost_logs.append(f"🔋 {src.nome} gastou {custo} stamina.")
                         continue
 
                     if src.classe == "arqueiro":
                         if src.cooldowns.get("chuva", 0) > 0:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"⌛ {src.nome} está em cooldown de Chuva de Flechas. Virou ataque básico.")
+                            action_logs.append(f"⌛ {src.nome} está em cooldown de Chuva de Flechas. Virou ataque básico.")
                             continue
                         custo = max(1, int(src.stamina_max * 0.30))
                         if src.stamina < custo:
                             src.acao = "atacar"; acted[src.user_id] = False
-                            logs.append(f"❌ {src.nome} sem stamina para Chuva de Flechas. Virou ataque básico.")
+                            action_logs.append(f"❌ {src.nome} sem stamina para Chuva de Flechas. Virou ataque básico.")
                             continue
                         src.stamina -= custo
                         src.used_stamina_skill = True
                         src.cooldowns["chuva"] = 2
+                        cost_logs.append(f"🔋 {src.nome} gastou {custo} stamina.")
                         for idx in (1, 2):
-                            dano, _, _ = await self._roll_attack(src, dst, atk * 0.75, allow_crit=False)
-                            dst.hp = max(0, dst.hp - dano)
-                            logs.append(f"🏹 {src.nome} flecha {idx} causou {dano}.")
+                            dano, _, _, miss_reason = await self._roll_attack(src, dst, atk * 0.75, allow_crit=False, defender_bonus_scale=0.5)
+                            if miss_reason == "shadow":
+                                action_logs.append(f"⚔ {src.nome} atacou, mas {dst.nome} estava oculto nas sombras e evitou o golpe.")
+                            elif miss_reason:
+                                action_logs.append(f"⚔ {src.nome} atacou, mas o golpe foi evitado.")
+                            else:
+                                perdido = _apply_damage(dst, dano)
+                                action_logs.append(f"🏹 {src.nome} flecha {idx} causou {perdido}.")
+                                hp_logs.append(f"🩸 {dst.nome} perdeu {perdido} HP.")
                         continue
 
                     src.acao = "atacar"; acted[src.user_id] = False
@@ -312,15 +366,19 @@ class ArenaManager:
                     if src.classe == "arqueiro" and dst.acao in ("atacar", "habilidade"):
                         accuracy_mult *= 1.20
                         dmg_mult *= 1.10
-                    if dst.classe == "assassino" and dst.buffs.get("shadow_turns", 0) > 0:
-                        accuracy_mult *= 0.40
                     if src.flags.get("berserk_activated"):
                         dmg_mult *= 2
                     if match.turno_atual >= 6:
                         dmg_mult *= 1.0 + (0.05 * (match.turno_atual - 5))
-                    dano, _, crit = await self._roll_attack(src, dst, atk_value, accuracy_mult=accuracy_mult, dmg_mult=dmg_mult)
-                    dst.hp = max(0, dst.hp - dano)
-                    logs.append(f"⚔ {src.nome} atacou e causou {dano} de dano{' (CRÍTICO)' if crit else ''}.")
+                    dano, _, crit, miss_reason = await self._roll_attack(src, dst, atk_value, accuracy_mult=accuracy_mult, dmg_mult=dmg_mult)
+                    if miss_reason == "shadow":
+                        action_logs.append(f"⚔ {src.nome} atacou, mas {dst.nome} estava oculto nas sombras e evitou o golpe.")
+                    elif miss_reason:
+                        action_logs.append(f"⚔ {src.nome} atacou, mas o golpe foi evitado.")
+                    else:
+                        perdido = _apply_damage(dst, dano)
+                        action_logs.append(f"⚔ {src.nome} atacou e causou {perdido} de dano{' (CRÍTICO)' if crit else ''}.")
+                        hp_logs.append(f"🩸 {dst.nome} perdeu {perdido} HP.")
                     if src.classe == "mago":
                         src.buffs["fluxo_now"] = 0.0
 
@@ -346,13 +404,36 @@ class ArenaManager:
             old_st, old_mn = f.stamina, f.mana
             f.stamina = min(f.stamina_max, f.stamina + stam_regen)
             f.mana = min(f.mana_max, f.mana + mana_regen)
-            logs.append(f"♻ {f.nome} regenerou +{f.stamina - old_st} stamina | +{f.mana - old_mn} mana.")
+            st_gain = f.stamina - old_st
+            mn_gain = f.mana - old_mn
+            if st_gain > 0 or mn_gain > 0:
+                parts = []
+                if st_gain > 0:
+                    parts.append(f"+{st_gain} stamina")
+                if mn_gain > 0:
+                    parts.append(f"+{mn_gain} mana")
+                regen_logs.append(f"{f.nome} {' | '.join(parts)}")
+            else:
+                regen_logs.append(f"{f.nome} recursos já estão no máximo.")
 
             if f.stamina <= 0:
                 f.buffs["def_penalty"] = 0.15
             if f.mana <= 0:
                 f.buffs["def_penalty_mana"] = 0.20
 
+        logs.extend(action_logs)
+        if hp_logs:
+            logs.append("")
+            logs.extend(hp_logs)
+        if cost_logs:
+            logs.append("")
+            logs.extend(cost_logs)
+
+        logs.append("")
+        logs.append("♻ Regeneração do turno:")
+        logs.extend(regen_logs)
+
+        logs.append("")
         logs.append("📊 Estado atual:")
         for f in (a, b):
             logs.append(
