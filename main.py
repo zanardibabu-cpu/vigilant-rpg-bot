@@ -36,6 +36,8 @@ MESTRE_ID = 1255256495369748573  # Cannabinoide
 # Para aparecer comandos slash instantaneamente (recomendado no Railway), defina GUILD_ID (ID do servidor) como variável de ambiente.
 GUILD_ID = int(os.getenv("GUILD_ID", "0") or "0")
 
+REQUIRED_CORE_COMMANDS = {"start", "bau", "reset", "restart", "upar"}
+
 
 # Canais (IDs fornecidos por você)
 CANAL_BEM_VINDO_ID = 1472100698211483679
@@ -3205,10 +3207,15 @@ async def sync_cmd(interaction: discord.Interaction):
 
         synced = await tree.sync(guild=guild)
 
-        nomes = ", ".join(cmd.name for cmd in synced)
+        synced_names = [cmd.name for cmd in synced]
+        nomes = ", ".join(synced_names)
+        faltando = sorted(REQUIRED_CORE_COMMANDS - set(synced_names))
+        status_core = "✅ Core OK" if not faltando else f"⚠️ Core faltando: {', '.join(faltando)}"
+        print(f"✅ Nomes sincronizados (guild {GUILD_ID}): {synced_names}")
+        print(f"🔎 Verificação comandos core: {status_core}")
+
         await interaction.response.send_message(
-            f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.
-{nomes}",
+            f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.\n{nomes}\n{status_core}",
             ephemeral=True
         )
 
@@ -3226,6 +3233,9 @@ async def on_ready():
     try:
         loaded = [cmd.name for cmd in tree.get_commands()]
         print(f"🧩 Comandos carregados no código: {len(loaded)} -> {loaded}")
+        faltando_loaded = sorted(REQUIRED_CORE_COMMANDS - set(loaded))
+        status_loaded = "✅ Core carregados no código" if not faltando_loaded else f"⚠️ Core ausentes no código: {', '.join(faltando_loaded)}"
+        print(f"🔎 Verificação comandos core no código: {status_loaded}")
     except Exception as e:
         print(f"⚠️ Falha ao listar comandos carregados: {e}")
 
@@ -3254,8 +3264,12 @@ async def on_ready():
             tree.copy_global_to(guild=guild)
 
             synced = await tree.sync(guild=guild)
+            synced_names = [cmd.name for cmd in synced]
+            faltando_sync = sorted(REQUIRED_CORE_COMMANDS - set(synced_names))
+            status_sync = "✅ presentes" if not faltando_sync else f"⚠️ faltando: {', '.join(faltando_sync)}"
             print(f"✅ Slash sync (guild {GUILD_ID}): {len(synced)} comandos")
-            print(f"✅ Nomes sincronizados: {[cmd.name for cmd in synced]}")
+            print(f"✅ Nomes sincronizados: {synced_names}")
+            print(f"🔎 Verificação comandos core sincronizados: {status_sync}")
         else:
             synced = await tree.sync()
             print(f"✅ Slash sync global: {len(synced)} comandos")
