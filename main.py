@@ -1,4 +1,4 @@
-print("BOOT VERSION: FORCE-REBUILD-COMMANDS-05")
+print("BOOT VERSION: FORCE-REBUILD-COMMANDS-06")
 
 import os
 import time
@@ -3189,29 +3189,29 @@ async def statusx1_cmd(interaction: discord.Interaction):
 @only_master_channel()
 async def sync_cmd(interaction: discord.Interaction):
     try:
-        if GUILD_ID:
-            guild = discord.Object(id=GUILD_ID)
-            synced = await tree.sync(guild=guild)
+        if not GUILD_ID:
             await interaction.response.send_message(
-                f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.",
+                "❌ Defina GUILD_ID no Railway para sincronização rápida por servidor.",
                 ephemeral=True
             )
-        else:
-            if client.guilds:
-                total = 0
-                for g in client.guilds:
-                    synced = await tree.sync(guild=g)
-                    total += len(synced)
-                await interaction.response.send_message(
-                    f"✅ Sync concluído em {len(client.guilds)} guild(s): {total} comandos.",
-                    ephemeral=True
-                )
-            else:
-                synced = await tree.sync()
-                await interaction.response.send_message(
-                    f"✅ Sync global concluído: {len(synced)} comandos.",
-                    ephemeral=True
-                )
+            return
+
+        guild = discord.Object(id=GUILD_ID)
+
+        tree.clear_commands(guild=guild)
+        await tree.sync(guild=guild)
+
+        tree.copy_global_to(guild=guild)
+
+        synced = await tree.sync(guild=guild)
+
+        nomes = ", ".join(cmd.name for cmd in synced)
+        await interaction.response.send_message(
+            f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.
+{nomes}",
+            ephemeral=True
+        )
+
     except Exception as e:
         await interaction.response.send_message(
             f"❌ Erro no sync: {e}",
@@ -3220,7 +3220,7 @@ async def sync_cmd(interaction: discord.Interaction):
 
 @client.event
 async def on_ready():
-    print("BOOT VERSION: FORCE-REBUILD-COMMANDS-05")
+    print("BOOT VERSION: FORCE-REBUILD-COMMANDS-06")
     print(f"✅ Logado como {client.user} (ID: {client.user.id if client.user else 'n/a'})")
 
     try:
@@ -3244,29 +3244,21 @@ async def on_ready():
     try:
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
+
             print(f"🧹 Limpando comandos antigos da guild {GUILD_ID}...")
             tree.clear_commands(guild=guild)
             cleared = await tree.sync(guild=guild)
             print(f"🧹 Comandos após limpeza: {len(cleared)}")
+
+            print(f"📋 Copiando comandos globais para a guild {GUILD_ID}...")
+            tree.copy_global_to(guild=guild)
+
             synced = await tree.sync(guild=guild)
             print(f"✅ Slash sync (guild {GUILD_ID}): {len(synced)} comandos")
             print(f"✅ Nomes sincronizados: {[cmd.name for cmd in synced]}")
         else:
-            if client.guilds:
-                total = 0
-                for g in client.guilds:
-                    print(f"🧹 Limpando comandos antigos da guild {g.id}...")
-                    tree.clear_commands(guild=g)
-                    cleared = await tree.sync(guild=g)
-                    print(f"🧹 Guild {g.id} limpa: {len(cleared)}")
-                    synced = await tree.sync(guild=g)
-                    total += len(synced)
-                    print(f"✅ Slash sync (guild {g.id}): {len(synced)} comandos")
-                    print(f"✅ Nomes sincronizados guild {g.id}: {[cmd.name for cmd in synced]}")
-                print(f"✅ Slash sync em {len(client.guilds)} guild(s): {total} comandos totais")
-            else:
-                synced = await tree.sync()
-                print(f"✅ Slash sync global: {len(synced)} comandos")
+            synced = await tree.sync()
+            print(f"✅ Slash sync global: {len(synced)} comandos")
     except Exception as e:
         print(f"❌ Falha no tree.sync(): {e}")
 
