@@ -3136,9 +3136,45 @@ async def statusx1_cmd(interaction: discord.Interaction):
 # [REMOVIDO DUPLICADO] command 'magia_criar'
 
 
+
+@tree.command(name="sync", description="(Mestre) Forçar sincronização dos slash commands.")
+@only_master_channel()
+async def sync_cmd(interaction: discord.Interaction):
+    try:
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            synced = await tree.sync(guild=guild)
+            await interaction.response.send_message(
+                f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.",
+                ephemeral=True
+            )
+        else:
+            synced_total = 0
+            if client.guilds:
+                for g in client.guilds:
+                    synced = await tree.sync(guild=g)
+                    synced_total += len(synced)
+                await interaction.response.send_message(
+                    f"✅ Sync concluído em {len(client.guilds)} guild(s): {synced_total} comandos.",
+                    ephemeral=True
+                )
+            else:
+                synced = await tree.sync()
+                await interaction.response.send_message(
+                    f"✅ Sync global concluído: {len(synced)} comandos.",
+                    ephemeral=True
+                )
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ Erro no sync: {e}",
+            ephemeral=True
+        )
+
 @client.event
 async def on_ready():
+    print("BOOT VERSION: START-BAU-RESET-SYNC-02")
     print(f"✅ Logado como {client.user} (ID: {client.user.id if client.user else 'n/a'})")
+
     try:
         await init_db()
         await seed_initial_data()
@@ -3154,11 +3190,9 @@ async def on_ready():
     try:
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
-            tree.copy_global_to(guild=guild)
             synced = await tree.sync(guild=guild)
             print(f"✅ Slash sync (guild {GUILD_ID}): {len(synced)} comandos")
         else:
-            # Sem GUILD_ID, sincroniza por guild para evitar demora de propagação global.
             if client.guilds:
                 total = 0
                 for g in client.guilds:
