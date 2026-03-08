@@ -1990,6 +1990,7 @@ class ClasseView(discord.ui.View):
 
 
 @tree.command(name="start", description="Criar seu personagem.")
+@app_commands.default_permissions()
 async def start_cmd(interaction: discord.Interaction):
     existente = await get_player(interaction.user.id)
     if existente:
@@ -2315,6 +2316,7 @@ async def build_profile_embed(p: dict, owner_name: str, owner_mention: str) -> d
 
 
 @tree.command(name="perfil", description="Ver sua ficha atual.")
+@app_commands.default_permissions()
 async def perfil_cmd(interaction: discord.Interaction):
     p = await get_player(interaction.user.id)
     if not p:
@@ -2325,6 +2327,7 @@ async def perfil_cmd(interaction: discord.Interaction):
 
 
 @tree.command(name="bau", description="Ver itens guardados (não equipados).")
+@app_commands.default_permissions()
 async def bau_cmd(interaction: discord.Interaction):
     p = await require_player(interaction)
     if not p:
@@ -2373,9 +2376,10 @@ async def bau_cmd(interaction: discord.Interaction):
 
 # Upar atributos (SEM hp_base/mana_base e sem stamina)
 
-@tree.command(name="upar", description="Gastar 1 ponto para aumentar um atributo.")
-@app_commands.describe(atributo="atk|magia|defesa|sorte|furtividade|destreza")
-async def upar_cmd(interaction: discord.Interaction, atributo: str):
+@tree.command(name="upar", description="Gastar pontos para aumentar um atributo.")
+@app_commands.default_permissions()
+@app_commands.describe(atributo="atk|magia|defesa|sorte|furtividade|destreza", quantidade="Quantidade de pontos para gastar")
+async def upar_cmd(interaction: discord.Interaction, atributo: str, quantidade: int):
     p = await require_player(interaction)
     if not p:
         return
@@ -2384,6 +2388,20 @@ async def upar_cmd(interaction: discord.Interaction, atributo: str):
     if pontos <= 0:
         await interaction.response.send_message(
             "❌ Você não possui pontos pendentes para distribuir.",
+            ephemeral=True
+        )
+        return
+
+    if quantidade <= 0:
+        await interaction.response.send_message(
+            "❌ A quantidade deve ser maior que 0.",
+            ephemeral=True
+        )
+        return
+
+    if quantidade > pontos:
+        await interaction.response.send_message(
+            f"❌ Você não possui pontos suficientes. Disponíveis: {pontos}.",
             ephemeral=True
         )
         return
@@ -2411,15 +2429,14 @@ async def upar_cmd(interaction: discord.Interaction, atributo: str):
         return
 
     p.setdefault("stats", {})
-    p["stats"][key] = int(p["stats"].get(key, 0)) + 1
-    p["pontos"] = pontos - 1
+    p["stats"][key] = int(p["stats"].get(key, 0)) + quantidade
+    p["pontos"] = pontos - quantidade
     await save_player(p)
 
     await interaction.response.send_message(
-        f"✅ **{key.upper()}** aumentado em +1.\n⭐ Pontos restantes: **{p['pontos']}**",
+        f"✅ **{key.upper()}** aumentado em +{quantidade}.\n⭐ Pontos restantes: **{p['pontos']}**",
         ephemeral=True
     )
-
 
 # Trade
 
@@ -2599,6 +2616,7 @@ class CacarFightView(discord.ui.View):
 
 
 @tree.command(name="cacar", description="Sair para caçar criaturas nas ruínas.")
+@app_commands.default_permissions()
 @only_channel(CANAL_CACAR_ID, "cacar")
 async def cacar_cmd(interaction: discord.Interaction):
     p = await require_player(interaction)
@@ -3019,6 +3037,7 @@ async def x1_cmd(interaction: discord.Interaction, jogador: discord.Member):
 
 
 @tree.command(name="aceitarx1", description="Aceitar um desafio de X1.")
+@app_commands.default_permissions()
 async def aceitarx1_cmd(interaction: discord.Interaction):
     if not await _ensure_x1_channel(interaction):
         return
@@ -3117,6 +3136,7 @@ async def aceitarx1_cmd(interaction: discord.Interaction):
 
 
 @tree.command(name="recusarx1", description="Recusar um desafio de X1.")
+@app_commands.default_permissions()
 async def recusarx1_cmd(interaction: discord.Interaction):
     if not await _ensure_x1_channel(interaction):
         return
@@ -3150,6 +3170,7 @@ async def cancelarx1_cmd(interaction: discord.Interaction):
 
 
 @tree.command(name="statusx1", description="Ver seu status atual no sistema de X1.")
+@app_commands.default_permissions()
 async def statusx1_cmd(interaction: discord.Interaction):
     if not await _ensure_x1_channel(interaction):
         return
