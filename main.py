@@ -1,4 +1,4 @@
-print("BOOT VERSION: READY-START-BAU-RESET-UPAR-SYNC-04")
+print("BOOT VERSION: FORCE-REBUILD-COMMANDS-05")
 
 import os
 import time
@@ -3220,8 +3220,9 @@ async def sync_cmd(interaction: discord.Interaction):
 
 @client.event
 async def on_ready():
-    print("BOOT VERSION: READY-START-BAU-RESET-UPAR-SYNC-04")
+    print("BOOT VERSION: FORCE-REBUILD-COMMANDS-05")
     print(f"✅ Logado como {client.user} (ID: {client.user.id if client.user else 'n/a'})")
+
     try:
         loaded = [cmd.name for cmd in tree.get_commands()]
         print(f"🧩 Comandos carregados no código: {len(loaded)} -> {loaded}")
@@ -3243,15 +3244,25 @@ async def on_ready():
     try:
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
+            print(f"🧹 Limpando comandos antigos da guild {GUILD_ID}...")
+            tree.clear_commands(guild=guild)
+            cleared = await tree.sync(guild=guild)
+            print(f"🧹 Comandos após limpeza: {len(cleared)}")
             synced = await tree.sync(guild=guild)
             print(f"✅ Slash sync (guild {GUILD_ID}): {len(synced)} comandos")
+            print(f"✅ Nomes sincronizados: {[cmd.name for cmd in synced]}")
         else:
             if client.guilds:
                 total = 0
                 for g in client.guilds:
+                    print(f"🧹 Limpando comandos antigos da guild {g.id}...")
+                    tree.clear_commands(guild=g)
+                    cleared = await tree.sync(guild=g)
+                    print(f"🧹 Guild {g.id} limpa: {len(cleared)}")
                     synced = await tree.sync(guild=g)
                     total += len(synced)
                     print(f"✅ Slash sync (guild {g.id}): {len(synced)} comandos")
+                    print(f"✅ Nomes sincronizados guild {g.id}: {[cmd.name for cmd in synced]}")
                 print(f"✅ Slash sync em {len(client.guilds)} guild(s): {total} comandos totais")
             else:
                 synced = await tree.sync()
