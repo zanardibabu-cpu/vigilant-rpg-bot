@@ -16,6 +16,7 @@ class FighterState:
     user_id: int
     nome: str
     classe: str
+    level: int
     hp: int
     hp_max: int
     stamina: int
@@ -121,6 +122,7 @@ class ArenaManager:
             user_id=uid,
             nome=member_name,
             classe=(p.get("classe") or "").lower(),
+            level=int(p.get("level", 1)),
             hp=int(p.get("hp", 1)),
             hp_max=int(p.get("hp", 1)),
             stamina=int(p.get("stamina", max_stamina)),
@@ -181,6 +183,7 @@ class ArenaManager:
 
         order = ["render", "defender", "habilidade", "atacar"]
         acted = {a.user_id: False, b.user_id: False}
+        surrendered = False
 
         for f in (a, b):
             if f.hp <= int(f.hp_max * 0.4) and f.classe == "barbaro" and not f.flags.get("berserk_activated"):
@@ -189,6 +192,8 @@ class ArenaManager:
 
         for action in order:
             for src, dst in ((a, b), (b, a)):
+                if surrendered:
+                    break
                 if src.acao != action or acted[src.user_id]:
                     continue
                 acted[src.user_id] = True
@@ -206,7 +211,8 @@ class ArenaManager:
                 if src.acao == "render":
                     src.hp = _hp_limit(src)
                     action_logs.append(f"🏳 {src.nome} se rendeu.")
-                    continue
+                    surrendered = True
+                    break
 
                 if src.acao == "defender":
                     custo = max(1, int(src.stamina_max * 0.20))
@@ -382,6 +388,13 @@ class ArenaManager:
                     if src.classe == "mago":
                         src.buffs["fluxo_now"] = 0.0
 
+            if surrendered:
+                break
+
+        if surrendered:
+            logs.extend(action_logs)
+            return "\n".join(logs)
+
         # efeitos defensivos/debuffs
         for f in (a, b):
             if f.debuffs.pop("def_down_next", 0):
@@ -406,15 +419,9 @@ class ArenaManager:
             f.mana = min(f.mana_max, f.mana + mana_regen)
             st_gain = f.stamina - old_st
             mn_gain = f.mana - old_mn
-            if st_gain > 0 or mn_gain > 0:
-                parts = []
-                if st_gain > 0:
-                    parts.append(f"+{st_gain} stamina")
-                if mn_gain > 0:
-                    parts.append(f"+{mn_gain} mana")
-                regen_logs.append(f"{f.nome} {' | '.join(parts)}")
-            else:
-                regen_logs.append(f"{f.nome} recursos já estão no máximo.")
+            st_txt = f"+{st_gain} stamina" if st_gain > 0 else "stamina já estava no máximo"
+            mn_txt = f"+{mn_gain} mana" if mn_gain > 0 else "mana já estava no máximo"
+            regen_logs.append(f"{f.nome} {st_txt} | {mn_txt}")
 
             if f.stamina <= 0:
                 f.buffs["def_penalty"] = 0.15
@@ -437,7 +444,7 @@ class ArenaManager:
         logs.append("📊 Estado atual:")
         for f in (a, b):
             logs.append(
-                f"{f.nome} — HP {f.hp}/{f.hp_max} | Mana {f.mana}/{f.mana_max} | Stamina {f.stamina}/{f.stamina_max} | CD {f.cooldowns or '-'}"
+                f"{f.nome} — Nv. {f.level} | HP {f.hp}/{f.hp_max} | Mana {f.mana}/{f.mana_max} | Stamina {f.stamina}/{f.stamina_max} | CD {f.cooldowns or '-'}"
             )
         return "\n".join(logs)
 
@@ -466,11 +473,17 @@ class ArenaManager:
         await self.save_player(pb)
         self.matches_by_user.pop(match.playerA.user_id, None)
         self.matches_by_user.pop(match.playerB.user_id, None)
-        await channel.send(f"🏁 X1 encerrado: {reason}{extra}")
+        await channel.send(
+            f"🏁 X1 encerrado: {reason}\n"
+            f"A: <@{match.playerA.user_id}> — Nv. {match.playerA.level} | "
+            f"B: <@{match.playerB.user_id}> — Nv. {match.playerB.level}{extra}"
+        )
 
     async def _run_match(self, match: ArenaMatch, channel: discord.abc.Messageable):
         await channel.send(
-            f"🎲 Arena iniciada!\nA: <@{match.playerA.user_id}> | B: <@{match.playerB.user_id}>\n"
+            f"🎲 Arena iniciada!\n"
+            f"A: <@{match.playerA.user_id}> — Nv. {match.playerA.level} | "
+            f"B: <@{match.playerB.user_id}> — Nv. {match.playerB.level}\n"
             f"d20 de iniciativa = **{match.d20_iniciativa}**\nComeça: <@{match.quem_comecou}>"
         )
 
@@ -519,10 +532,10 @@ class ArenaManager:
                 await self._finish_match(match, match.playerA.user_id, match.playerB.user_id, "HP limite atingido", channel)
                 return
             if match.playerA.acao == "render":
-                await self._finish_match(match, match.playerB.user_id, match.playerA.user_id, "rendição", channel)
+                await self._finish_match(match, match.playerB.user_id, match.playerA.user_id, "por rendição", channel)
                 return
             if match.playerB.acao == "render":
-                await self._finish_match(match, match.playerA.user_id, match.playerB.user_id, "rendição", channel)
+                await self._finish_match(match, match.playerA.user_id, match.playerB.user_id, "por rendição", channel)
                 return
 
     def register_commands(self):
