@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Optional
 import discord
 from discord import app_commands
 
-TURN_TIMEOUT_S = 35
+TURN_TIMEOUT_S = 60
 CANAL_ARENA_X1_ID = 1479210311662960711
 
 
@@ -148,7 +148,7 @@ class ArenaManager:
         for f in (a, b):
             if not f.acao:
                 f.acao = "atacar"
-                logs.append(f"⏱ {f.nome} não escolheu em 35s: ação automática = Atacar.")
+                logs.append(f"⏱ {f.nome} não escolheu em {TURN_TIMEOUT_S}s: ação automática = Atacar (timeout).")
             f.used_stamina_skill = False
             f.used_mana_skill = False
 

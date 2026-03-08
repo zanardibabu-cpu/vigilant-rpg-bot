@@ -409,6 +409,49 @@ async def loja_cmd(interaction: discord.Interaction, loja: str = "mercador"):
         ephemeral=True
     )
 
+
+@tree.command(name="comprar", description="Comprar um item ativo da loja.")
+@only_channel(CANAL_LOJA_ID, "loja")
+async def comprar_cmd(interaction: discord.Interaction, item_id: str):
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+
+    p = await require_player(interaction)
+    if not p:
+        await interaction.followup.send("❌ Use **/start** para criar seu personagem primeiro.", ephemeral=True)
+        return
+    if await blocked_by_rest(interaction, p):
+        return
+
+    item_id = (item_id or "").lower().strip()
+    it = await item_get(item_id)
+    if not it or int(it.get("deleted", 0)) == 1:
+        await interaction.followup.send("❌ Item inexistente.", ephemeral=True)
+        return
+
+    if not await shop_is_active(item_id):
+        await interaction.followup.send("❌ Este item está inativo/não vendável no momento.", ephemeral=True)
+        return
+
+    preco = int(shop_price(it))
+    gold = int(p.get("gold", 0))
+    if gold < preco:
+        await interaction.followup.send(f"❌ Gold insuficiente. Preço: **{preco}** | Seu gold: **{gold}**.", ephemeral=True)
+        return
+
+    if not await shop_decrease_stock(item_id, 1):
+        await interaction.followup.send("❌ Item sem estoque no momento.", ephemeral=True)
+        return
+
+    p["gold"] = gold - preco
+    p.setdefault("inventario", []).append(item_id)
+    await save_player(p)
+
+    await interaction.followup.send(
+        f"✅ Você comprou **{it.get('nome', item_id)}** por **{preco} gold**.",
+        ephemeral=True
+    )
+
 def parse_json_field(txt: str) -> Dict[str, Any]:
     txt = (txt or "").strip()
     if not txt:
