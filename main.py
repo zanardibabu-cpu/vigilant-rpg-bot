@@ -1,4 +1,4 @@
-print("BOOT VERSION: 2026-03-04-01")
+print("BOOT VERSION: READY-START-BAU-RESET-UPAR-SYNC-04")
 
 import os
 import time
@@ -2371,6 +2371,54 @@ async def bau_cmd(interaction: discord.Interaction):
 
 # Upar atributos (SEM hp_base/mana_base e sem stamina)
 
+@tree.command(name="upar", description="Gastar 1 ponto para aumentar um atributo.")
+@app_commands.describe(atributo="atk|magia|defesa|sorte|furtividade|destreza")
+async def upar_cmd(interaction: discord.Interaction, atributo: str):
+    p = await require_player(interaction)
+    if not p:
+        return
+
+    pontos = int(p.get("pontos", 0))
+    if pontos <= 0:
+        await interaction.response.send_message(
+            "❌ Você não possui pontos pendentes para distribuir.",
+            ephemeral=True
+        )
+        return
+
+    aliases = {
+        "atk": "atk",
+        "ataque": "atk",
+        "magia": "magia",
+        "mag": "magia",
+        "defesa": "defesa",
+        "def": "defesa",
+        "sorte": "sorte",
+        "furtividade": "furtividade",
+        "furt": "furtividade",
+        "destreza": "destreza",
+        "dex": "destreza",
+    }
+
+    key = aliases.get((atributo or "").strip().lower())
+    if key is None:
+        await interaction.response.send_message(
+            "❌ Atributo inválido. Use: atk, magia, defesa, sorte, furtividade ou destreza.",
+            ephemeral=True
+        )
+        return
+
+    p.setdefault("stats", {})
+    p["stats"][key] = int(p["stats"].get(key, 0)) + 1
+    p["pontos"] = pontos - 1
+    await save_player(p)
+
+    await interaction.response.send_message(
+        f"✅ **{key.upper()}** aumentado em +1.\n⭐ Pontos restantes: **{p['pontos']}**",
+        ephemeral=True
+    )
+
+
 # Trade
 
 # Descansar / Albergue
@@ -3149,13 +3197,13 @@ async def sync_cmd(interaction: discord.Interaction):
                 ephemeral=True
             )
         else:
-            synced_total = 0
             if client.guilds:
+                total = 0
                 for g in client.guilds:
                     synced = await tree.sync(guild=g)
-                    synced_total += len(synced)
+                    total += len(synced)
                 await interaction.response.send_message(
-                    f"✅ Sync concluído em {len(client.guilds)} guild(s): {synced_total} comandos.",
+                    f"✅ Sync concluído em {len(client.guilds)} guild(s): {total} comandos.",
                     ephemeral=True
                 )
             else:
@@ -3172,8 +3220,13 @@ async def sync_cmd(interaction: discord.Interaction):
 
 @client.event
 async def on_ready():
-    print("BOOT VERSION: START-BAU-RESET-SYNC-02")
+    print("BOOT VERSION: READY-START-BAU-RESET-UPAR-SYNC-04")
     print(f"✅ Logado como {client.user} (ID: {client.user.id if client.user else 'n/a'})")
+    try:
+        loaded = [cmd.name for cmd in tree.get_commands()]
+        print(f"🧩 Comandos carregados no código: {len(loaded)} -> {loaded}")
+    except Exception as e:
+        print(f"⚠️ Falha ao listar comandos carregados: {e}")
 
     try:
         await init_db()
