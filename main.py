@@ -2373,9 +2373,12 @@ async def bau_cmd(interaction: discord.Interaction):
 
 # Upar atributos (SEM hp_base/mana_base e sem stamina)
 
-@tree.command(name="upar", description="Gastar 1 ponto para aumentar um atributo.")
-@app_commands.describe(atributo="atk|magia|defesa|sorte|furtividade|destreza")
-async def upar_cmd(interaction: discord.Interaction, atributo: str):
+@tree.command(name="upar", description="Gastar pontos para aumentar um atributo.")
+@app_commands.describe(
+    atributo="atk|magia|defesa|sorte|furtividade|destreza",
+    quantidade="Quantidade de pontos para gastar"
+)
+async def upar_cmd(interaction: discord.Interaction, atributo: str, quantidade: int):
     p = await require_player(interaction)
     if not p:
         return
@@ -2384,6 +2387,20 @@ async def upar_cmd(interaction: discord.Interaction, atributo: str):
     if pontos <= 0:
         await interaction.response.send_message(
             "❌ Você não possui pontos pendentes para distribuir.",
+            ephemeral=True
+        )
+        return
+
+    if quantidade <= 0:
+        await interaction.response.send_message(
+            "❌ A quantidade deve ser maior que 0.",
+            ephemeral=True
+        )
+        return
+
+    if quantidade > pontos:
+        await interaction.response.send_message(
+            f"❌ Você só possui {pontos} ponto(s) pendente(s).",
             ephemeral=True
         )
         return
@@ -2411,12 +2428,12 @@ async def upar_cmd(interaction: discord.Interaction, atributo: str):
         return
 
     p.setdefault("stats", {})
-    p["stats"][key] = int(p["stats"].get(key, 0)) + 1
-    p["pontos"] = pontos - 1
+    p["stats"][key] = int(p["stats"].get(key, 0)) + quantidade
+    p["pontos"] = pontos - quantidade
     await save_player(p)
 
     await interaction.response.send_message(
-        f"✅ **{key.upper()}** aumentado em +1.\n⭐ Pontos restantes: **{p['pontos']}**",
+        f"✅ **{key.upper()}** aumentado em +{quantidade}.\n⭐ Pontos restantes: **{p['pontos']}**",
         ephemeral=True
     )
 
