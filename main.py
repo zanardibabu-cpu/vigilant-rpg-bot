@@ -36,6 +36,8 @@ MESTRE_ID = 1255256495369748573  # Cannabinoide
 # Para aparecer comandos slash instantaneamente (recomendado no Railway), defina GUILD_ID (ID do servidor) como variável de ambiente.
 GUILD_ID = int(os.getenv("GUILD_ID", "0") or "0")
 
+REQUIRED_CORE_COMMANDS = {"start", "bau", "reset", "restart", "upar"}
+
 
 # Canais (IDs fornecidos por você)
 CANAL_BEM_VINDO_ID = 1472100698211483679
@@ -1988,6 +1990,7 @@ class ClasseView(discord.ui.View):
 
 
 @tree.command(name="start", description="Criar seu personagem.")
+@app_commands.default_permissions()
 async def start_cmd(interaction: discord.Interaction):
     existente = await get_player(interaction.user.id)
     if existente:
@@ -2313,6 +2316,7 @@ async def build_profile_embed(p: dict, owner_name: str, owner_mention: str) -> d
 
 
 @tree.command(name="perfil", description="Ver sua ficha atual.")
+@app_commands.default_permissions()
 async def perfil_cmd(interaction: discord.Interaction):
     p = await get_player(interaction.user.id)
     if not p:
@@ -2323,6 +2327,7 @@ async def perfil_cmd(interaction: discord.Interaction):
 
 
 @tree.command(name="bau", description="Ver itens guardados (não equipados).")
+@app_commands.default_permissions()
 async def bau_cmd(interaction: discord.Interaction):
     p = await require_player(interaction)
     if not p:
@@ -2372,6 +2377,7 @@ async def bau_cmd(interaction: discord.Interaction):
 # Upar atributos (SEM hp_base/mana_base e sem stamina)
 
 @tree.command(name="upar", description="Gastar 1 ponto para aumentar um atributo.")
+@app_commands.default_permissions()
 @app_commands.describe(atributo="atk|magia|defesa|sorte|furtividade|destreza")
 async def upar_cmd(interaction: discord.Interaction, atributo: str):
     p = await require_player(interaction)
@@ -2597,6 +2603,7 @@ class CacarFightView(discord.ui.View):
 
 
 @tree.command(name="cacar", description="Sair para caçar criaturas nas ruínas.")
+@app_commands.default_permissions()
 @only_channel(CANAL_CACAR_ID, "cacar")
 async def cacar_cmd(interaction: discord.Interaction):
     p = await require_player(interaction)
@@ -3017,6 +3024,7 @@ async def x1_cmd(interaction: discord.Interaction, jogador: discord.Member):
 
 
 @tree.command(name="aceitarx1", description="Aceitar um desafio de X1.")
+@app_commands.default_permissions()
 async def aceitarx1_cmd(interaction: discord.Interaction):
     if not await _ensure_x1_channel(interaction):
         return
@@ -3115,6 +3123,7 @@ async def aceitarx1_cmd(interaction: discord.Interaction):
 
 
 @tree.command(name="recusarx1", description="Recusar um desafio de X1.")
+@app_commands.default_permissions()
 async def recusarx1_cmd(interaction: discord.Interaction):
     if not await _ensure_x1_channel(interaction):
         return
@@ -3148,6 +3157,7 @@ async def cancelarx1_cmd(interaction: discord.Interaction):
 
 
 @tree.command(name="statusx1", description="Ver seu status atual no sistema de X1.")
+@app_commands.default_permissions()
 async def statusx1_cmd(interaction: discord.Interaction):
     if not await _ensure_x1_channel(interaction):
         return
@@ -3205,10 +3215,15 @@ async def sync_cmd(interaction: discord.Interaction):
 
         synced = await tree.sync(guild=guild)
 
-        nomes = ", ".join(cmd.name for cmd in synced)
+        synced_names = [cmd.name for cmd in synced]
+        nomes = ", ".join(synced_names)
+        faltando = sorted(REQUIRED_CORE_COMMANDS - set(synced_names))
+        status_core = "✅ Core OK" if not faltando else f"⚠️ Core faltando: {', '.join(faltando)}"
+        print(f"✅ Nomes sincronizados (guild {GUILD_ID}): {synced_names}")
+        print(f"🔎 Verificação comandos core: {status_core}")
+
         await interaction.response.send_message(
-            f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.
-{nomes}",
+            f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.\n{nomes}\n{status_core}",
             ephemeral=True
         )
 
@@ -3226,6 +3241,9 @@ async def on_ready():
     try:
         loaded = [cmd.name for cmd in tree.get_commands()]
         print(f"🧩 Comandos carregados no código: {len(loaded)} -> {loaded}")
+        faltando_loaded = sorted(REQUIRED_CORE_COMMANDS - set(loaded))
+        status_loaded = "✅ Core carregados no código" if not faltando_loaded else f"⚠️ Core ausentes no código: {', '.join(faltando_loaded)}"
+        print(f"🔎 Verificação comandos core no código: {status_loaded}")
     except Exception as e:
         print(f"⚠️ Falha ao listar comandos carregados: {e}")
 
@@ -3254,8 +3272,12 @@ async def on_ready():
             tree.copy_global_to(guild=guild)
 
             synced = await tree.sync(guild=guild)
+            synced_names = [cmd.name for cmd in synced]
+            faltando_sync = sorted(REQUIRED_CORE_COMMANDS - set(synced_names))
+            status_sync = "✅ presentes" if not faltando_sync else f"⚠️ faltando: {', '.join(faltando_sync)}"
             print(f"✅ Slash sync (guild {GUILD_ID}): {len(synced)} comandos")
-            print(f"✅ Nomes sincronizados: {[cmd.name for cmd in synced]}")
+            print(f"✅ Nomes sincronizados: {synced_names}")
+            print(f"🔎 Verificação comandos core sincronizados: {status_sync}")
         else:
             synced = await tree.sync()
             print(f"✅ Slash sync global: {len(synced)} comandos")
