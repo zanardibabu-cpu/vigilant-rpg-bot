@@ -3207,8 +3207,7 @@ async def sync_cmd(interaction: discord.Interaction):
 
         nomes = ", ".join(cmd.name for cmd in synced)
         await interaction.response.send_message(
-            f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.
-{nomes}",
+            f"✅ Sync concluído na guild {GUILD_ID}: {len(synced)} comandos.\n{nomes}",
             ephemeral=True
         )
 
