@@ -13,6 +13,8 @@ import discord
 from discord import app_commands
 from typing import Optional, List, Dict, Any, Tuple
 
+from x1_arena import setup_x1_arena
+
 # ==========================
 # DISCORD CLIENT / TREE
 # ==========================
@@ -407,6 +409,49 @@ async def loja_cmd(interaction: discord.Interaction, loja: str = "mercador"):
         ephemeral=True
     )
 
+
+@tree.command(name="comprar", description="Comprar um item ativo da loja.")
+@only_channel(CANAL_LOJA_ID, "loja")
+async def comprar_cmd(interaction: discord.Interaction, item_id: str):
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+
+    p = await require_player(interaction)
+    if not p:
+        await interaction.followup.send("❌ Use **/start** para criar seu personagem primeiro.", ephemeral=True)
+        return
+    if await blocked_by_rest(interaction, p):
+        return
+
+    item_id = (item_id or "").lower().strip()
+    it = await item_get(item_id)
+    if not it or int(it.get("deleted", 0)) == 1:
+        await interaction.followup.send("❌ Item inexistente.", ephemeral=True)
+        return
+
+    if not await shop_is_active(item_id):
+        await interaction.followup.send("❌ Este item está inativo/não vendável no momento.", ephemeral=True)
+        return
+
+    preco = int(shop_price(it))
+    gold = int(p.get("gold", 0))
+    if gold < preco:
+        await interaction.followup.send(f"❌ Gold insuficiente. Preço: **{preco}** | Seu gold: **{gold}**.", ephemeral=True)
+        return
+
+    if not await shop_decrease_stock(item_id, 1):
+        await interaction.followup.send("❌ Item sem estoque no momento.", ephemeral=True)
+        return
+
+    p["gold"] = gold - preco
+    p.setdefault("inventario", []).append(item_id)
+    await save_player(p)
+
+    await interaction.followup.send(
+        f"✅ Você comprou **{it.get('nome', item_id)}** por **{preco} gold**.",
+        ephemeral=True
+    )
+
 def parse_json_field(txt: str) -> Dict[str, Any]:
     txt = (txt or "").strip()
     if not txt:
@@ -648,9 +693,6 @@ DROP_POOL_RARO = [
 # Narração ON = considerado "combate/narração ativa" para travar troca do livro de magias
 NARRACAO_GUILD: Dict[int, bool] = {}
 
-# X1 (estado em memória)
-X1_PENDENTES: Dict[int, Dict[str, Any]] = {}  # chave: desafiado_id
-X1_ATIVOS: Dict[int, Dict[str, Any]] = {}     # chave: user_id
 
 # ==============================
 # SEED: ITENS INICIAIS (só para primeira execução)
@@ -2954,248 +2996,13 @@ async def dargold_exceto_cmd(interaction: discord.Interaction, quantidade: int, 
     )
 
 
-async def _ensure_x1_channel(interaction: discord.Interaction) -> bool:
-    print("DEBUG X1 channel atual:", interaction.channel_id)
-    print("DEBUG X1 arena esperada:", CANAL_ARENA_X1_ID)
-    print("DEBUG X1 nome canal:", getattr(interaction.channel, "name", None))
-    if interaction.channel_id != CANAL_ARENA_X1_ID:
-        await interaction.response.send_message(
-            "⚔️ O sistema de X1 só pode ser usado no canal 🏆arena-x1🏆.",
-            ephemeral=True
-        )
-        return False
-    return True
-
-
-def _x1_is_busy(user_id: int) -> bool:
-    if user_id in X1_ATIVOS:
-        return True
-    for alvo_id, pend in X1_PENDENTES.items():
-        if alvo_id == user_id or int(pend["desafiante_id"]) == user_id:
-            return True
-    return False
-
-
-def _x1_clear_active(state: Dict[str, Any]):
-    a = int(state["a_id"])
-    b = int(state["b_id"])
-    X1_ATIVOS.pop(a, None)
-    X1_ATIVOS.pop(b, None)
-
-
-async def _x1_execute_round(attacker: dict, defender: dict, attacker_name: str, defender_name: str, defender_limit_hp: int) -> str:
-    atk_roll = rolar_d20()
-    atk_stat = await total_stat(attacker, "atk")
-    def_stat = await total_stat(defender, "defesa")
-    atk_total = atk_roll + atk_stat
-    def_total = 10 + def_stat
-
-    if atk_total < def_total:
-        return f"{attacker_name} errou ({atk_total} vs {def_total})."
-
-    dano = max(1, random.randint(1, 8) + atk_stat - def_stat)
-    if atk_roll == 20:
-        dano *= 2
-
-    novo_hp = int(defender["hp"]) - dano
-    defender["hp"] = max(defender_limit_hp, novo_hp)
-    crit_txt = " 💥 CRÍTICO!" if atk_roll == 20 else ""
-    return f"{attacker_name} acertou {defender_name} por **{dano}** de dano.{crit_txt} (HP {defender_name}: {defender['hp']})"
-
-
-@tree.command(name="x1", description="Desafiar um jogador para duelo na arena.")
-async def x1_cmd(interaction: discord.Interaction, jogador: discord.Member):
-    if not await _ensure_x1_channel(interaction):
-        return
-
-    desafiante = interaction.user
-    if jogador.bot:
-        await interaction.response.send_message("❌ Você não pode desafiar um bot.", ephemeral=True)
-        return
-    if jogador.id == desafiante.id:
-        await interaction.response.send_message("❌ Você não pode se desafiar.", ephemeral=True)
-        return
-    if _x1_is_busy(desafiante.id) or _x1_is_busy(jogador.id):
-        await interaction.response.send_message("❌ Um dos jogadores já está em desafio/luta de X1.", ephemeral=True)
-        return
-
-    p_a = await get_player(desafiante.id)
-    p_b = await get_player(jogador.id)
-    if not p_a or not p_b:
-        await interaction.response.send_message("❌ Ambos os jogadores precisam ter personagem.", ephemeral=True)
-        return
-
-    X1_PENDENTES[jogador.id] = {
-        "desafiante_id": desafiante.id,
-        "desafiado_id": jogador.id,
-        "created_ts": now_ts(),
-    }
-    await interaction.response.send_message(
-        f"⚔️ {desafiante.mention} desafiou {jogador.mention} para um X1. {jogador.mention}, use /aceitarx1 ou /recusarx1."
-    )
-
-
-@tree.command(name="aceitarx1", description="Aceitar um desafio de X1.")
-async def aceitarx1_cmd(interaction: discord.Interaction):
-    if not await _ensure_x1_channel(interaction):
-        return
-
-    pend = X1_PENDENTES.get(interaction.user.id)
-    if not pend:
-        await interaction.response.send_message("❌ Você não possui desafio pendente.", ephemeral=True)
-        return
-
-    desafiante_id = int(pend["desafiante_id"])
-    desafiado_id = int(pend["desafiado_id"])
-    X1_PENDENTES.pop(interaction.user.id, None)
-
-    if _x1_is_busy(desafiante_id) or _x1_is_busy(desafiado_id):
-        await interaction.response.send_message("❌ Um dos jogadores já está em X1.", ephemeral=True)
-        return
-
-    p_a = await get_player(desafiante_id)
-    p_b = await get_player(desafiado_id)
-    if not p_a or not p_b:
-        await interaction.response.send_message("❌ Um dos jogadores não possui personagem válido.", ephemeral=True)
-        return
-
-    hp_a_init = int(p_a["hp"])
-    hp_b_init = int(p_b["hp"])
-    lim_a = max(1, int(hp_a_init * 0.05))
-    lim_b = max(1, int(hp_b_init * 0.05))
-
-    state = {
-        "a_id": desafiante_id,
-        "b_id": desafiado_id,
-        "a_limit": lim_a,
-        "b_limit": lim_b,
-        "started_ts": now_ts(),
-    }
-    X1_ATIVOS[desafiante_id] = state
-    X1_ATIVOS[desafiado_id] = state
-
-    await interaction.response.send_message(
-        f"🏁 X1 iniciado entre <@{desafiante_id}> e <@{desafiado_id}>! (limites: {lim_a} HP / {lim_b} HP)"
-    )
-
-    rounds: List[str] = []
-    for rodada in range(1, 51):
-        if int(p_a["hp"]) <= lim_a or int(p_b["hp"]) <= lim_b:
-            break
-
-        ini_a = rolar_d20() + await total_stat(p_a, "destreza")
-        ini_b = rolar_d20() + await total_stat(p_b, "destreza")
-        if ini_a >= ini_b:
-            first, second = p_a, p_b
-        else:
-            first, second = p_b, p_a
-
-        name_first = f"<@{desafiante_id}>" if first is p_a else f"<@{desafiado_id}>"
-        name_second = f"<@{desafiado_id}>" if first is p_a else f"<@{desafiante_id}>"
-        lim_second = lim_b if first is p_a else lim_a
-        lim_first = lim_a if first is p_a else lim_b
-
-        t1 = await _x1_execute_round(first, second, name_first, name_second, lim_second)
-        rounds.append(f"**Rodada {rodada}**: {t1}")
-        if int(second["hp"]) <= (lim_b if second is p_b else lim_a):
-            break
-        t2 = await _x1_execute_round(second, first, name_second, name_first, lim_first)
-        rounds.append(f"↳ {t2}")
-
-    perdeu_a = int(p_a["hp"]) <= lim_a
-    perdeu_b = int(p_b["hp"]) <= lim_b
-
-    if perdeu_a and not perdeu_b:
-        vencedor, perdedor = p_b, p_a
-        vencedor_id, perdedor_id = desafiado_id, desafiante_id
-    elif perdeu_b and not perdeu_a:
-        vencedor, perdedor = p_a, p_b
-        vencedor_id, perdedor_id = desafiante_id, desafiado_id
-    else:
-        vencedor = perdedor = None
-        vencedor_id = perdedor_id = 0
-
-    resultado = "⚖️ X1 encerrado sem vencedor claro."
-    if vencedor and perdedor:
-        transfer = int(int(perdedor.get("gold", 0)) * 0.30)
-        if transfer == 0 and int(perdedor.get("gold", 0)) > 0:
-            transfer = 1
-        transfer = min(transfer, int(perdedor.get("gold", 0)))
-        perdedor["gold"] = int(perdedor.get("gold", 0)) - transfer
-        vencedor["gold"] = int(vencedor.get("gold", 0)) + transfer
-        resultado = f"🏆 Vencedor: <@{vencedor_id}> | 💰 Transferência: {transfer} gold de <@{perdedor_id}>."
-
-    await save_player(p_a)
-    await save_player(p_b)
-    _x1_clear_active(state)
-
-    resumo = "\n".join(rounds[-10:]) if rounds else "Sem rodadas registradas."
-    await interaction.followup.send(f"{resultado}\n\n{resumo}")
-
-
-@tree.command(name="recusarx1", description="Recusar um desafio de X1.")
-async def recusarx1_cmd(interaction: discord.Interaction):
-    if not await _ensure_x1_channel(interaction):
-        return
-    pend = X1_PENDENTES.get(interaction.user.id)
-    if not pend:
-        await interaction.response.send_message("❌ Você não possui desafio pendente.", ephemeral=True)
-        return
-    desafiante_id = int(pend["desafiante_id"])
-    X1_PENDENTES.pop(interaction.user.id, None)
-    await interaction.response.send_message(
-        f"❎ <@{interaction.user.id}> recusou o desafio de <@{desafiante_id}>."
-    )
-
-
-@tree.command(name="cancelarx1", description="Cancelar um desafio de X1 ainda não aceito.")
-async def cancelarx1_cmd(interaction: discord.Interaction):
-    if not await _ensure_x1_channel(interaction):
-        return
-
-    alvo_id = None
-    for k, pend in X1_PENDENTES.items():
-        if int(pend["desafiante_id"]) == interaction.user.id:
-            alvo_id = k
-            break
-    if alvo_id is None:
-        await interaction.response.send_message("❌ Você não possui desafio pendente para cancelar.", ephemeral=True)
-        return
-
-    X1_PENDENTES.pop(alvo_id, None)
-    await interaction.response.send_message("✅ Seu desafio de X1 foi cancelado.")
-
-
-@tree.command(name="statusx1", description="Ver seu status atual no sistema de X1.")
-async def statusx1_cmd(interaction: discord.Interaction):
-    if not await _ensure_x1_channel(interaction):
-        return
-
-    uid = interaction.user.id
-    for alvo_id, pend in X1_PENDENTES.items():
-        if alvo_id == uid:
-            await interaction.response.send_message(
-                f"📨 Você foi desafiado por <@{int(pend['desafiante_id'])}>. Use /aceitarx1 ou /recusarx1.",
-                ephemeral=True
-            )
-            return
-        if int(pend["desafiante_id"]) == uid:
-            await interaction.response.send_message(
-                f"⏳ Seu desafio para <@{alvo_id}> está pendente.",
-                ephemeral=True
-            )
-            return
-
-    if uid in X1_ATIVOS:
-        st = X1_ATIVOS[uid]
-        oponente = int(st["b_id"]) if int(st["a_id"]) == uid else int(st["a_id"])
-        await interaction.response.send_message(
-            f"⚔️ Você está em um X1 ativo contra <@{oponente}>.",
-            ephemeral=True
-        )
-        return
-
-    await interaction.response.send_message("✅ Você não possui desafio/luta de X1 no momento.", ephemeral=True)
+setup_x1_arena(
+    tree=tree,
+    get_player=get_player,
+    save_player=save_player,
+    total_stat=total_stat,
+    require_player=require_player,
+)
 
 
 # [REMOVIDO DUPLICADO] command 'spell_ativar'
