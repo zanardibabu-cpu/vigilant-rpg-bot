@@ -213,15 +213,28 @@ class ArenaManager:
         d20 = random.randint(1, 20)
         logs.append(f"🎲 d20 de {src.nome} = {d20}")
 
+        outcome, mult = self._mod_from_d20_offensive(d20)
+
         if dst.classe == "assassino" and dst.buffs.get("oculto_turns", 0) > 0 and random.random() < 0.50:
-            logs.append(f"🌫 {src.nome} errou: {dst.nome} evitou o golpe enquanto estava oculto.")
-            self._add_momentum(momentum_logs, src, -1)
-            return 0, d20, "evaded"
+            if outcome in ("crit_fail", "fail"):
+                logs.append(f"🌫 {src.nome} errou: {dst.nome} evitou o golpe enquanto estava oculto.")
+                if outcome == "crit_fail":
+                    src.debuffs["crit_fail_def_down_next"] = True
+                    logs.append(f"💥 Falha crítica de {src.nome}: ação perdida e -10% defesa no próximo turno.")
+                self._add_momentum(momentum_logs, src, -1)
+                return 0, d20, "evaded"
+
+            before = dst.hp
+            dst.hp = max(self._hp_limit(dst), dst.hp - 1)
+            dealt = max(0, before - dst.hp)
+            logs.append("⚔ O golpe passou de raspão e causou 1 de dano.")
+            hp_logs.append(f"🩸 {dst.nome} perdeu {dealt} HP.")
+            self._add_momentum(momentum_logs, src, +1)
+            return dealt, d20, "evaded_graze"
 
         if src.debuffs.get("crit_fail_def_down_next", False):
             src.debuffs.pop("crit_fail_def_down_next", None)
 
-        outcome, mult = self._mod_from_d20_offensive(d20)
         if outcome == "crit_fail":
             logs.append(f"💥 Falha crítica de {src.nome}: ação perdida e -10% defesa no próximo turno.")
             src.debuffs["crit_fail_def_down_next"] = True
@@ -252,9 +265,13 @@ class ArenaManager:
             defense_total *= 0.90
 
         if atk_total < defense_total:
-            logs.append(f"🛡 {dst.nome} evitou o golpe.")
-            self._add_momentum(momentum_logs, src, -1)
-            return 0, d20, "blocked"
+            before = dst.hp
+            dst.hp = max(self._hp_limit(dst), dst.hp - 1)
+            dealt = max(0, before - dst.hp)
+            logs.append("⚔ O golpe passou de raspão e causou 1 de dano.")
+            hp_logs.append(f"🩸 {dst.nome} perdeu {dealt} HP.")
+            self._add_momentum(momentum_logs, src, +1)
+            return dealt, d20, "blocked_graze"
 
         raw = random.randint(1, 8) + base_power - (dst_stats["def"] / 2)
         raw = max(1, int(raw))
@@ -287,12 +304,10 @@ class ArenaManager:
 
         if dealt > 0:
             self._add_momentum(momentum_logs, src, +1)
-            if d20 >= 19:
-                self._add_momentum(momentum_logs, src, +1)
             if outcome == "crit":
                 self._add_momentum(momentum_logs, dst, -1)
 
-        if src.classe == "clerigo" and dealt > 0:
+        if src.classe == "clerigo" and is_skill and dealt > 0:
             cap = max(1, int(src.hp_max * 0.15))
             heal = min(cap, int(dealt * 0.15))
             h_before = src.hp
@@ -309,6 +324,10 @@ class ArenaManager:
                 return False
             src.stamina -= cost
             cost_logs.append(f"🔋 {src.nome} gastou {cost} stamina.")
+            mana_before = src.mana
+            src.mana = min(src.mana_max, src.mana + 8)
+            recovered = src.mana - mana_before
+            cost_logs.append(f"🔵 {src.nome} recuperou {recovered} mana ao focar na defesa.")
             src.buffs["defender_bonus"] = src.flags.get("base_def", 0.0) * 0.50
             return True
         return True
