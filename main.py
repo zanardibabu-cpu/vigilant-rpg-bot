@@ -1687,36 +1687,47 @@ async def get_player(user_id: int):
 async def save_player(p: dict):
     async with aiosqlite.connect(DB_FILE) as db:
         p["equipado"] = ensure_equipado_format(p.get("equipado", {}))
-        await db.execute("""
-        INSERT INTO players (
-            user_id, classe, level, xp, gold, pontos, hp, mana, stamina, max_stamina,
-            rest_until_ts, last_hunt_ts, stats_json, inventario_json, equipado_json, spellbook_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        global PLAYERS_TABLE_COLS_CACHE
+        if PLAYERS_TABLE_COLS_CACHE is None:
+            cur = await db.execute("PRAGMA table_info(players)")
+            rows = await cur.fetchall()
+            PLAYERS_TABLE_COLS_CACHE = {str(r[1]) for r in rows}
+
+        values_by_col = {
+            "user_id": p["user_id"],
+            "classe": p["classe"],
+            "level": int(p["level"]),
+            "xp": int(p["xp"]),
+            "gold": int(p["gold"]),
+            "pontos": int(p.get("pontos", 0)),
+            "hp": int(p["hp"]),
+            "mana": int(p["mana"]),
+            "stamina": int(p["stamina"]),
+            "max_stamina": int(p["max_stamina"]),
+            "rest_until_ts": int(p.get("rest_until_ts", 0)),
+            "last_hunt_ts": int(p.get("last_hunt_ts", 0)),
+            "stats_json": jdump(p.get("stats", {})),
+            "inventario_json": jdump(p.get("inventario", [])),
+            "equipado_json": jdump(p.get("equipado", {})),
+            "spellbook_json": jdump(p.get("spellbook", [])),
+        }
+
+        cols = [c for c in values_by_col.keys() if c in PLAYERS_TABLE_COLS_CACHE]
+        if "user_id" not in cols:
+            raise RuntimeError("Tabela players sem coluna user_id; não é possível salvar jogador.")
+
+        placeholders = ", ".join(["?"] * len(cols))
+        insert_cols = ", ".join(cols)
+        update_cols = [c for c in cols if c != "user_id"]
+        update_sql = ",\n            ".join([f"{c}=excluded.{c}" for c in update_cols])
+        params = [values_by_col[c] for c in cols]
+
+        await db.execute(f"""
+        INSERT INTO players ({insert_cols})
+        VALUES ({placeholders})
         ON CONFLICT(user_id) DO UPDATE SET
-            classe=excluded.classe,
-            level=excluded.level,
-            xp=excluded.xp,
-            gold=excluded.gold,
-            pontos=excluded.pontos,
-            hp=excluded.hp,
-            mana=excluded.mana,
-            stamina=excluded.stamina,
-            max_stamina=excluded.max_stamina,
-            rest_until_ts=excluded.rest_until_ts,
-            last_hunt_ts=excluded.last_hunt_ts,
-            stats_json=excluded.stats_json,
-            inventario_json=excluded.inventario_json,
-            equipado_json=excluded.equipado_json,
-            spellbook_json=excluded.spellbook_json
-        """, (
-            p["user_id"], p["classe"], int(p["level"]), int(p["xp"]), int(p["gold"]), int(p.get("pontos", 0)),
-            int(p["hp"]), int(p["mana"]), int(p["stamina"]), int(p["max_stamina"]),
-            int(p.get("rest_until_ts", 0)), int(p.get("last_hunt_ts", 0)),
-            jdump(p.get("stats", {})),
-            jdump(p.get("inventario", [])),
-            jdump(p.get("equipado", {})),
-            jdump(p.get("spellbook", [])),
-        ))
+            {update_sql}
+        """, params)
         await db.commit()
 
 async def require_player(interaction: discord.Interaction):
